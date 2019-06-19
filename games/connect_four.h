@@ -13,7 +13,7 @@ public:
 	typedef int Move;
 	static const Move no_move = -1;
 
-	static const char player_markers[3]; 
+	static const char player_markers[3];
 
 	ConnectFourState(int num_rows_ = 6, int num_cols_ = 7)
 		: player_to_move(1),
@@ -21,7 +21,7 @@ public:
 	      num_cols(num_cols_),
 		  last_col(-1),
 		  last_row(-1)
-	{ 
+	{
 		board.resize(num_rows, vector<char>(num_cols, player_markers[0]));
 	}
 
@@ -208,4 +208,4 @@ ostream& operator << (ostream& out, const ConnectFourState& state)
 	return out;
 }
 
-const char ConnectFourState::player_markers[3] = {'.', 'X', 'O'}; 
+const char ConnectFourState::player_markers[3] = {'.', 'X', 'O'};

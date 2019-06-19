@@ -49,17 +49,11 @@ namespace MCTS
 {
 struct ComputeOptions
 {
-	int number_of_threads;
-	int max_iterations;
-	double max_time;
-	bool verbose;
+	int number_of_threads = 8;
+	int max_iterations = 10000;
+	double max_time = -1.0; // default is no time limit
+	bool verbose = false;
 
-	ComputeOptions() :
-		number_of_threads(8),
-		max_iterations(10000),
-		max_time(-1.0), // default is no time limit.
-		verbose(false)
-	{ }
 };
 
 template<typename State>
