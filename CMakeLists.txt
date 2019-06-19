@@ -1,12 +1,13 @@
 # Author: petter.strandmark@gmail.com (Petter Strandmark)
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.0)
-PROJECT(MCTS C CXX)
+PROJECT(MCTS CXX)
 
 SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
 SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+set(CMAKE_CXX_STANDARD 11)
 # Default locations to search for on various platforms.
 LIST(APPEND SEARCH_LIBS /usr/lib)
 LIST(APPEND SEARCH_LIBS /usr/local/lib)
@@ -31,9 +32,6 @@ IF (NOT CMAKE_BUILD_TYPE)
     "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
     FORCE)
 ENDIF (NOT CMAKE_BUILD_TYPE)
-
-# C++11 support.
-include(EnableCPP11.cmake)
 
 SET (MY_LIBRARY_DEPENDENCIES)
 

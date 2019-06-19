@@ -64,7 +64,7 @@ struct ComputeOptions
 
 template<typename State>
 typename State::Move compute_move(const State root_state,
-                                  const ComputeOptions options = ComputeOptions());
+                                  const ComputeOptions &options = ComputeOptions());
 }
 //
 //
@@ -118,7 +118,7 @@ class Node
 public:
 	typedef typename State::Move Move;
 
-	Node(const State& state);
+	explicit Node(const State& state);
 	~Node();
 
 	bool has_untried_moves() const;
@@ -300,7 +300,7 @@ std::string Node<State>::indent_string(int indent) const
 
 template<typename State>
 std::unique_ptr<Node<State>>  compute_tree(const State root_state,
-                                           const ComputeOptions options,
+                                           const ComputeOptions &options,
                                            std::mt19937_64::result_type initial_seed)
 {
 	std::mt19937_64 random_engine(initial_seed);
@@ -370,7 +370,7 @@ std::unique_ptr<Node<State>>  compute_tree(const State root_state,
 
 template<typename State>
 typename State::Move compute_move(const State root_state,
-                                  const ComputeOptions options)
+                                  const ComputeOptions &options)
 {
 	using namespace std;
 

@@ -12,12 +12,14 @@ void main_program()
 {
 	using namespace std;
 
-	bool human_player = true;
+	bool human_player = false;
 
 	MCTS::ComputeOptions player1_options, player2_options;
-	player1_options.max_iterations = 100000;
+	player1_options.max_iterations =  1e8;
+    player1_options.number_of_threads = 8;
 	player1_options.verbose = true;
-	player2_options.max_iterations =  10000;
+    player2_options.max_iterations = 1e8;
+    player2_options.number_of_threads = 8;
 	player2_options.verbose = true;
 
 	ConnectFourState state;
