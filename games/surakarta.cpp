@@ -30,6 +30,7 @@ void main_program()
 	player2_options.verbose = true;
 
 	SurakartaState state;
+    state.player_to_move = 1;
 	while (state.has_moves()) {
 		cout << endl << "State: " << state << endl;
 

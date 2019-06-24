@@ -53,7 +53,6 @@ public:
                 board[i] = ChessType::Null;
             }
         }
-        moves.reserve(BOARD_SIZE * 2);
     }
     void do_move(Move move)
     {
@@ -101,21 +100,21 @@ public:
 
             for(auto cur_out: cur_pos_out) {
                 for(auto tar_out: tar_pos_out) {
-                    if (can_eat(outer_loop, cur_out, tar_out))
+                    if (can_eat(outer_loop.cbegin(), outer_loop.cend(), cur_out, tar_out))
                     {
-                        board[tar_out->second * BOARD_SIZE + tar_out->first] = player_chess[3 - player_to_move];
+                        board[tar_out->second * BOARD_SIZE + tar_out->first] = player_chess[player_to_move];
                         board[cur_out->second * BOARD_SIZE + cur_out->first] = ChessType::Null;
-                        return;
+                        goto success;
                     }
                 }
             }
             for(auto cur: cur_pos_inn) {
                 for(auto tar: tar_pos_inn) {
-                    if (can_eat(outer_loop, cur, tar))
+                    if (can_eat(inner_loop.cbegin(), inner_loop.cend(), cur, tar))
                     {
-                        board[tar->second * BOARD_SIZE + tar->first] = player_chess[3 - player_to_move];
+                        board[tar->second * BOARD_SIZE + tar->first] = player_chess[player_to_move];
                         board[cur->second * BOARD_SIZE + cur->first] = ChessType::Null;
-                        return;
+                        goto success;
                     }
                 }
             }
@@ -123,23 +122,19 @@ public:
         } else {
                 throw runtime_error("下的位置不合法");
         }
+success:
         player_to_move = 3 - player_to_move;
-        // clear the all moves.
-        moves.clear();
-        has_check_all_validated_move = false;
         return;
     }
     bool has_moves() const {
-        if (!has_check_all_validated_move)
-            get_moves();
-        return !moves.empty();
+        return !get_moves().empty();
     }
 	template<typename RandomEngine>
 	void do_random_move(RandomEngine* engine) {
         assert(get_winner() == ChessType::Null);
         Move m;
         while (true) {
-            get_moves();
+            auto moves = get_moves();
             std::uniform_int_distribution<int> move_idx(static_cast<int>(0),static_cast<int>(moves.size() - 1));
             decltype(move_idx(*engine)) idx;
             idx = move_idx(*engine);
@@ -165,20 +160,16 @@ public:
     std::vector<Move> get_moves() const
     {
         PR_ASSERT();
-		if (get_winner() != player_chess[0]) {
-			return moves;
-		}
-        decltype(moves) temp_move;
-        if(!has_check_all_validated_move) {
-            for (auto row = 0; row < BOARD_SIZE; ++row)
-                for (auto col = 0; col < BOARD_SIZE; ++col) {
-                    if ( board[row * BOARD_SIZE + col] == player_chess[player_to_move]) {
-                        temp_move = get_valid_move(col, row);
-                        moves.insert(moves.end(), temp_move.begin(), temp_move.end());
-                    }
+        vector<Move> temp_move;
+        vector<Move> temp_moves;
+        for (auto row = 0; row < BOARD_SIZE; ++row)
+            for (auto col = 0; col < BOARD_SIZE; ++col) {
+                if ( board[row * BOARD_SIZE + col] == player_chess[player_to_move]) {
+                    temp_move = get_valid_move(col, row);
+                    temp_moves.insert(temp_moves.end(), temp_move.begin(), temp_move.end());
                 }
-        }
-		return moves;
+            }
+		return temp_moves;
     }
 	void print(ostream& out) const
 	{
@@ -218,7 +209,7 @@ private:
         }
         return iterators;
     }
-    bool can_eat(const decltype(inner_loop) &loop, decltype(inner_loop)::const_iterator curr,
+    bool can_eat(const decltype(inner_loop)::const_iterator begin, const decltype(inner_loop)::const_iterator end,decltype(inner_loop)::const_iterator curr,
             decltype(inner_loop)::const_iterator tart) const {
         auto former = curr > tart? tart: curr;
         auto latter = curr > tart? curr: tart;
@@ -226,9 +217,9 @@ private:
         bool flag_latter = true;
         // check from former to later.
         for (auto i = former + 1; i != latter; ++i) {
-            if (i == loop.cend()) i = loop.cbegin();
+            if (i == end) i = begin;
             // if the former is begin()
-            if (i == former) break;
+            if (i == latter) break;
             if ((board[ i->second * BOARD_SIZE + i->first] != ChessType::Null) && *i != *curr && *i != *tart) {
                 flag_former = false;
                 break;
@@ -238,7 +229,7 @@ private:
         else {
             // check from latter to former if necessary.
             for (auto i = latter + 1; i != former; ++i) {
-                if (i == loop.cend()) i = loop.cbegin();
+                if (i == end) i = begin;
                 // if the former is begin()
                 if (i == former) break;
                 if ((board[ i->second * BOARD_SIZE + i->first] != ChessType::Null) && *i != *curr && *i != *tart) {
@@ -250,7 +241,7 @@ private:
         return flag_former | flag_latter;
     }
     // get the winner if we have, return player[0] otherwise.
-    decltype(player_to_move) get_winner() const {
+    ChessType get_winner() const {
         auto begin_iter = begin(board);
         auto end_iter = end(board);
         for (auto i = 1; i <= 2; ++i) {
@@ -258,8 +249,20 @@ private:
                 return player_chess[3 - i];
             }
         }
-        return player_chess[0];
 
+        // 如歌有一方没有可行动作，则判断谁的子多即可
+        auto tmp_moves = get_moves();
+        if (tmp_moves.empty()) {
+            int num[3] = {0};
+            for (auto i = 1; i <= 2; ++i) {
+                num[i] = count(begin_iter, end_iter, player_chess[i]);
+            }
+            if (num[1] > num[2])
+                return player_chess[1];
+            else
+                return player_chess[2];
+        }
+        return player_chess[0];
     }
     vector<Move> get_valid_move(int x, int y) const {
         vector<Move> temp_moves;
@@ -279,20 +282,22 @@ private:
         for(auto &inner: inners) {
             auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), inner);
             if (move.is_activated) temp_moves.push_back(move);
-            move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(inner));
+            move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(inner) - 1);
             if (move.is_activated) temp_moves.push_back(move);
         }
         for(auto &outer: outers) {
             auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), outer);
             if (move.is_activated) temp_moves.push_back(move);
-            move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(outer));
+            move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(outer)- 1);
             if (move.is_activated) temp_moves.push_back(move);
         }
         return temp_moves;
     }
-    Move get_valid_eat_one_direction(decltype(inner_loop)::const_iterator begin, decltype(inner_loop)::const_iterator end, decltype(inner_loop)::const_iterator pos) const {
+    template<typename T>
+    Move get_valid_eat_one_direction(T begin, T end, T pos) const {
         for(auto i = pos + 1; i != pos; ++i) {
             if (i == end) i = begin;
+            if (i == pos) break;
             if (board[BOARD_SIZE * i->second + i->first] == player_chess[ 3 - player_to_move]) {
                 return {1, {pos->first, pos->second}, {i->first, i->second}};
             } else if (board[BOARD_SIZE * i->second + i->first] == ChessType::Null) {
@@ -304,27 +309,7 @@ private:
         }
         return {0, {pos->first, pos->second}, {pos->first, pos->second}};
     }
-    Move get_valid_eat_one_direction(decltype(inner_loop)::const_reverse_iterator begin, decltype(inner_loop)::const_reverse_iterator end, decltype(inner_loop)::const_reverse_iterator pos) const {
-        // cause the reverse iterator will offset the location.
-        pos--;
-        for(auto i = pos + 1; i != pos; ++i) {
-            if (i == end) i = begin;
-            if (board[BOARD_SIZE * i->second + i->first] == player_chess[ 3 - player_to_move]) {
-                return {1, {pos->first, pos->second}, {i->first, i->second}};
-            } else if (board[BOARD_SIZE * i->second + i->first] == ChessType::Null) {
-                continue;
-            } else {
-                if ( *i == *pos) continue;
-                else return {0, {i->first, i->second}, {pos->first, pos->second}};
-            }
-        }
-        return {0, {pos->first, pos->second}, {pos->first, pos->second}};
-    }
-
     ChessType board[BOARD_SIZE * BOARD_SIZE];
-    // flag indicate have we check all the validated moves.
-    bool has_check_all_validated_move = false;
-    mutable vector<Move> moves;
 };
 inline ostream& operator<<(ostream& out, const SurakartaState& state)
 {
@@ -351,7 +336,7 @@ inline ostream& operator<<(ostream &out, const SurakartaState::Move &move)
 }
 inline bool operator!=(const SurakartaState::Move lhs, const SurakartaState::Move rhs)
 {
-    return lhs.is_activated && rhs.is_activated && lhs.current == rhs.current && lhs.target == rhs.target;
+    return !(lhs.is_activated && rhs.is_activated && lhs.current == rhs.current && lhs.target == rhs.target);
 }
 inline bool operator<(const SurakartaState::Move lhs, const SurakartaState::Move rhs)
 {

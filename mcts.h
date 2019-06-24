@@ -232,11 +232,11 @@ Node<State>* Node<State>::add_child(const Move& move, const State& state)
 {
 	auto node = new Node(state, move, this);
 	children.push_back(node);
-	attest( ! children.empty());
+	assert(!children.empty());
 
 	auto itr = moves.begin();
 	for (; itr != moves.end() && *itr != move; ++itr);
-	attest(itr != moves.end());
+	assert(itr != moves.end());
 	moves.erase(itr);
 	return node;
 }
