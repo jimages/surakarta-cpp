@@ -8,7 +8,7 @@ SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 # Default locations to search for on various platforms.
 LIST(APPEND SEARCH_LIBS /usr/lib)
 LIST(APPEND SEARCH_LIBS /usr/local/lib)
@@ -68,14 +68,6 @@ ELSE()
 	MESSAGE("-- Found Cinder include directory.")
 ENDIF()
 
-FIND_LIBRARY(CINDER_LIB cinder)
-IF (NOT EXISTS ${CINDER_LIB})
-	MESSAGE("-- Did not find the Cinder library.")
-	SET(USE_CINDER OFF)
-ELSE()
-	MESSAGE("-- Found the Cinder library.")
-ENDIF()
-
 
 #
 # gcc settings.
@@ -110,11 +102,6 @@ ENDIF (MSVC)
 #
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR})
 INCLUDE_DIRECTORIES(third-party/Catch)
-IF (${USE_CINDER})
-	MESSAGE("-- Will be using Cinder.")
-	INCLUDE_DIRECTORIES(${CINDER_INCLUDE})
-ENDIF()
 FILE(GLOB MCTS_HEADERS ${CMAKE_SOURCE_DIR}/*.h)
 
 ADD_SUBDIRECTORY(games)
-ADD_SUBDIRECTORY(tests)

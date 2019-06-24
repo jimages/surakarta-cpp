@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <cassert>
 using namespace std;
 
 #include <mcts.h>
@@ -27,9 +28,9 @@ public:
 
 	void do_move(Move move)
 	{
-		attest(0 <= move && move < num_cols);
-		attest(board[0][move] == player_markers[0]);
-		check_invariant();
+		assert(0 <= move && move < num_cols);
+		assert(board[0][move] == player_markers[0]);
+		assert(check_invariant());
 
 		int row = num_rows - 1;
 		while (board[row][move] != player_markers[0]) row--;
@@ -75,7 +76,7 @@ public:
 
 	std::vector<Move> get_moves() const
 	{
-		check_invariant();
+		assert(check_invariant());
 
 		std::vector<Move> moves;
 		if (get_winner() != player_markers[0]) {
@@ -149,8 +150,8 @@ public:
 
 	double get_result(int current_player_to_move) const
 	{
-		dattest( ! has_moves());
-		check_invariant();
+		assert( ! has_moves());
+		assert(check_invariant());
 
 		auto winner = get_winner();
 		if (winner == player_markers[0]) {
@@ -191,9 +192,9 @@ public:
 	int player_to_move;
 private:
 
-	void check_invariant() const
+	bool check_invariant() const
 	{
-		attest(player_to_move == 1 || player_to_move == 2);
+		return (player_to_move == 1 || player_to_move == 2);
 	}
 
 	int num_rows, num_cols;

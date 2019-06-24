@@ -92,7 +92,6 @@ using std::endl;
 using std::vector;
 using std::size_t;
 
-static void check(bool expr, const char* message);
 static void assertion_failed(const char* expr, const char* file, int line);
 
 #define attest(expr) if (!(expr)) { ::MCTS::assertion_failed(#expr, __FILE__, __LINE__); }
@@ -389,12 +388,12 @@ typename State::Move compute_move(const State root_state,
 		auto func = [t, &root_state, &job_options] () -> std::unique_ptr<Node<State>>
 		{
 			return compute_tree(root_state, job_options, 1012411 * t + 12515);
-		};
+		}; // lambda 函数
 
 		root_futures.push_back(std::async(std::launch::async, func));
 	}
 
-	// Collect the results.
+	// 将多个对局的结果合并成一个新的结果.
 	vector<unique_ptr<Node<State>>> roots;
 	for (int t = 0; t < options.number_of_threads; ++t) {
 		roots.push_back(std::move(root_futures[t].get()));
@@ -459,13 +458,6 @@ typename State::Move compute_move(const State root_state,
 /////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////
 
-
-static void check(bool expr, const char* message)
-{
-	if (!expr) {
-		throw std::invalid_argument(message);
-	}
-}
 
 static void assertion_failed(const char* expr, const char* file_cstr, int line)
 {
