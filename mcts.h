@@ -1,5 +1,6 @@
 #ifndef MCTS_HEADER_PETTER
 #define MCTS_HEADER_PETTER
+#include <cassert>
 //
 // Petter Strandmark 2013
 // petter.strandmark@gmail.com
