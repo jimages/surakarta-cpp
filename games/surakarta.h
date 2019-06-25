@@ -54,7 +54,7 @@ public:
             }
         }
     }
-    void do_move(Move move)
+    void do_move(Move move, bool is_human = false)
     {
         MV_ASSERT(move);
         PR_ASSERT();
@@ -65,81 +65,87 @@ public:
         assert(board[move.target.second * BOARD_SIZE + move.target.first]
                 != player_chess[player_to_move]);
 
-        if (board[move.target.second * BOARD_SIZE + move.target.first] == ChessType::Null) {
-            // we check the available position
-            const auto &current = move.current;
-            const auto &target = move.target;
+        if (is_human) {
+            if (board[move.target.second * BOARD_SIZE + move.target.first] == ChessType::Null) {
+                // we check the available position
+                const auto &current = move.current;
+                const auto &target = move.target;
 
-            if (!(current.first >= 0 && current.second >= 0 && target.first >= 0
-                        && target.second >= 0 && current.first < 6 && current.second < 6
-                        && target.first < 6 && target.second < 6))
-                throw runtime_error("下的位置不合法");
+                if (!(current.first >= 0 && current.second >= 0 && target.first >= 0
+                            && target.second >= 0 && current.first < 6 && current.second < 6
+                            && target.first < 6 && target.second < 6))
+                    throw runtime_error("下的位置不合法");
 
-            if ((abs(current.first - target.first) > 1 )
-                    || ( abs(current.second - target.second) > 1))
-                throw runtime_error("下的位置不合法");
+                if ((abs(current.first - target.first) > 1 )
+                        || ( abs(current.second - target.second) > 1))
+                    throw runtime_error("下的位置不合法");
 
-            board[target.second * BOARD_SIZE + target.first] = player_chess[player_to_move];
-            board[current.second * BOARD_SIZE + current.first] = ChessType::Null;
+                board[target.second * BOARD_SIZE + target.first] = player_chess[player_to_move];
+                board[current.second * BOARD_SIZE + current.first] = ChessType::Null;
 
-        } else if (board[move.target.second * BOARD_SIZE + move.target.first]
-                == player_chess[3 - player_to_move]) {
-            // check can we eat the certain postion
+            } else if (board[move.target.second * BOARD_SIZE + move.target.first]
+                    == player_chess[3 - player_to_move]) {
+                // check can we eat the certain postion
 
-            // check the current position
-            auto cur_pos_out = find_all(outer_loop.cbegin(), outer_loop.cend(),
-                    std::make_pair(move.current.first, move.current.second));
-            auto cur_pos_inn = find_all(inner_loop.cbegin(), inner_loop.cend(),
-                    std::make_pair(move.current.first, move.current.second));
+                // check the current position
+                auto cur_pos_out = find_all(outer_loop.cbegin(), outer_loop.cend(),
+                        std::make_pair(move.current.first, move.current.second));
+                auto cur_pos_inn = find_all(inner_loop.cbegin(), inner_loop.cend(),
+                        std::make_pair(move.current.first, move.current.second));
 
-            // check the target position.
-            auto tar_pos_out = find_all(outer_loop.cbegin(), outer_loop.cend(),
-                    std::make_pair(move.target.first, move.target.second));
-            auto tar_pos_inn = find_all(inner_loop.cbegin(), inner_loop.cend(),
-                    std::make_pair(move.target.first, move.target.second));
+                // check the target position.
+                auto tar_pos_out = find_all(outer_loop.cbegin(), outer_loop.cend(),
+                        std::make_pair(move.target.first, move.target.second));
+                auto tar_pos_inn = find_all(inner_loop.cbegin(), inner_loop.cend(),
+                        std::make_pair(move.target.first, move.target.second));
 
-            for(auto cur_out: cur_pos_out) {
-                for(auto tar_out: tar_pos_out) {
-                    if (can_eat(outer_loop.cbegin(), outer_loop.cend(), cur_out, tar_out))
-                    {
-                        board[tar_out->second * BOARD_SIZE + tar_out->first] = player_chess[player_to_move];
-                        board[cur_out->second * BOARD_SIZE + cur_out->first] = ChessType::Null;
-                        goto success;
+                for(auto cur_out: cur_pos_out) {
+                    for(auto tar_out: tar_pos_out) {
+                        if (can_eat(outer_loop.cbegin(), outer_loop.cend(), cur_out, tar_out))
+                        {
+                            board[tar_out->second * BOARD_SIZE + tar_out->first] = player_chess[player_to_move];
+                            board[cur_out->second * BOARD_SIZE + cur_out->first] = ChessType::Null;
+                            goto success;
+                        }
                     }
                 }
-            }
-            for(auto cur: cur_pos_inn) {
-                for(auto tar: tar_pos_inn) {
-                    if (can_eat(inner_loop.cbegin(), inner_loop.cend(), cur, tar))
-                    {
-                        board[tar->second * BOARD_SIZE + tar->first] = player_chess[player_to_move];
-                        board[cur->second * BOARD_SIZE + cur->first] = ChessType::Null;
-                        goto success;
+                for(auto cur: cur_pos_inn) {
+                    for(auto tar: tar_pos_inn) {
+                        if (can_eat(inner_loop.cbegin(), inner_loop.cend(), cur, tar))
+                        {
+                            board[tar->second * BOARD_SIZE + tar->first] = player_chess[player_to_move];
+                            board[cur->second * BOARD_SIZE + cur->first] = ChessType::Null;
+                            goto success;
+                        }
                     }
                 }
+                throw runtime_error("下的位置不合法");
+            } else {
+                    throw runtime_error("下的位置不合法");
             }
-            throw runtime_error("下的位置不合法");
         } else {
-                throw runtime_error("下的位置不合法");
+            board[move.target.second * BOARD_SIZE + move.target.first] = player_chess[player_to_move];
+            board[move.current.second * BOARD_SIZE + move.current.first] = ChessType::Null;
         }
+
 success:
-        player_to_move = 3 - player_to_move;
-        return;
-    }
-    bool has_moves() const {
-        return !get_moves().empty();
-    }
-	template<typename RandomEngine>
-	void do_random_move(RandomEngine* engine) {
-        assert(get_winner() == ChessType::Null);
-        Move m;
-        while (true) {
-            auto moves = get_moves();
-            std::uniform_int_distribution<int> move_idx(static_cast<int>(0),static_cast<int>(moves.size() - 1));
-            decltype(move_idx(*engine)) idx;
-            idx = move_idx(*engine);
-            if (get_winner() == ChessType::Null) {
-                m = moves[idx];
+    player_to_move = 3 - player_to_move;
+    return;
+}
+bool has_moves() const {
+    return !get_moves().empty();
+}
+template<typename RandomEngine>
+void do_random_move(RandomEngine* engine) {
+    assert(get_winner() == ChessType::Null);
+    Move m;
+    while (true) {
+        auto moves = get_moves();
+        std::uniform_int_distribution<int> move_idx(static_cast<int>(0),static_cast<int>(moves.size() - 1));
+        decltype(move_idx(*engine)) idx;
+        idx = move_idx(*engine);
+        if (get_winner() == ChessType::Null) {
+            m = moves[idx];
                 do_move(m);
             } else {
                 return;
