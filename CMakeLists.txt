@@ -35,6 +35,9 @@ IF (NOT CMAKE_BUILD_TYPE)
     "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
     FORCE)
 ENDIF (NOT CMAKE_BUILD_TYPE)
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -Og")
+set(CMAKE_CXX_FLAGS_RELEASE "-Ofast")
 
 SET (MY_LIBRARY_DEPENDENCIES)
 
