@@ -22,10 +22,10 @@ void main_program()
 	bool human_player = true;
 
 	MCTS::ComputeOptions player1_options, player2_options;
-	player1_options.max_iterations =  1e5;
+	player1_options.max_iterations =  1e4;
     player1_options.number_of_threads = 8;
 	player1_options.verbose = true;
-    player2_options.max_iterations = 1e5;
+    player2_options.max_iterations = 1e4;
     player2_options.number_of_threads = 8;
 	player2_options.verbose = true;
 

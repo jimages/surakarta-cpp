@@ -129,6 +129,7 @@ public:
         }
 
 success:
+    has_get_moves = false;
     player_to_move = 3 - player_to_move;
     return;
 }
@@ -166,16 +167,21 @@ void do_random_move(RandomEngine* engine) {
     std::vector<Move> get_moves() const
     {
         PR_ASSERT();
-        vector<Move> temp_move;
-        vector<Move> temp_moves;
-        for (auto row = 0; row < BOARD_SIZE; ++row)
-            for (auto col = 0; col < BOARD_SIZE; ++col) {
-                if ( board[row * BOARD_SIZE + col] == player_chess[player_to_move]) {
-                    temp_move = get_valid_move(col, row);
-                    temp_moves.insert(temp_moves.end(), temp_move.begin(), temp_move.end());
+        if (has_get_moves) {
+            return moves;
+        } else {
+            // 利用局部性原理，在用的时候清除
+            moves.clear();
+            vector<Move> temp_move;
+            for (auto row = 0; row < BOARD_SIZE; ++row)
+                for (auto col = 0; col < BOARD_SIZE; ++col) {
+                    if ( board[row * BOARD_SIZE + col] == player_chess[player_to_move]) {
+                        temp_move = get_valid_move(col, row);
+                        moves.insert(moves.end(), temp_move.begin(), temp_move.end());
+                    }
                 }
-            }
-		return temp_moves;
+            return moves;
+        }
     }
 	void print(ostream& out) const
 	{
@@ -316,6 +322,8 @@ private:
         return {0, {pos->first, pos->second}, {pos->first, pos->second}};
     }
     ChessType board[BOARD_SIZE * BOARD_SIZE];
+    mutable bool has_get_moves = false;
+    mutable vector<Move> moves;
 };
 inline ostream& operator<<(ostream& out, const SurakartaState& state)
 {
