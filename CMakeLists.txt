@@ -29,16 +29,12 @@ ENABLE_TESTING()
 #
 # The CACHE STRING logic here and elsewhere is needed to force CMake
 # to pay attention to the value of these variables.
-IF (NOT CMAKE_BUILD_TYPE)
-  MESSAGE("-- No build type specified; defaulting to CMAKE_BUILD_TYPE=Release.")
-  SET(CMAKE_BUILD_TYPE Release CACHE STRING
+SET(CMAKE_BUILD_TYPE Release CACHE STRING
     "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
     FORCE)
-ENDIF (NOT CMAKE_BUILD_TYPE)
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -Og")
 set(CMAKE_CXX_FLAGS_RELEASE "-Ofast")
-
 SET (MY_LIBRARY_DEPENDENCIES)
 
 # Multithreading using OpenMP
@@ -60,17 +56,6 @@ IF (${OPENMP})
     MESSAGE("-- Can't find OpenMP. Continuing without it.")
   ENDIF(${OPENMP_FOUND})
 ENDIF (${OPENMP})
-
-
-SET(USE_CINDER ON)
-FIND_PATH(CINDER_INCLUDE NAMES cinder/Cinder.h PATHS ${SEARCH_HEADERS})
-IF (NOT EXISTS ${CINDER_INCLUDE})
-	MESSAGE("-- Did not find Cinder include directory.")
-	SET(USE_CINDER OFF)
-ELSE()
-	MESSAGE("-- Found Cinder include directory.")
-ENDIF()
-
 
 #
 # gcc settings.
@@ -104,7 +89,6 @@ ENDIF (MSVC)
 # Include directories
 #
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR})
-INCLUDE_DIRECTORIES(third-party/Catch)
 FILE(GLOB MCTS_HEADERS ${CMAKE_SOURCE_DIR}/*.h)
 
 ADD_SUBDIRECTORY(games)
