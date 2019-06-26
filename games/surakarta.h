@@ -170,12 +170,14 @@ void do_random_move(RandomEngine* engine) {
         if (has_get_moves) {
             return moves;
         } else {
-            // 利用局部性原理，在用的时候再清除
+            // 利用局部性原理，在用的时候清除
             moves.clear();
+            vector<Move> temp_move;
             for (auto row = 0; row < BOARD_SIZE; ++row)
                 for (auto col = 0; col < BOARD_SIZE; ++col) {
                     if ( board[row * BOARD_SIZE + col] == player_chess[player_to_move]) {
-                        get_valid_move(col, row, back_inserter(moves));
+                        temp_move = get_valid_move(col, row);
+                        moves.insert(moves.end(), temp_move.begin(), temp_move.end());
                     }
                 }
             return moves;
@@ -213,9 +215,9 @@ private:
     template< class InputIt, class T >
     vector<InputIt> find_all( InputIt first, InputIt last, const T& value ) const {
         vector<InputIt> iterators;
-        for(auto i = first; i != last; ++i) {
-            if (*i == value)
-                iterators.push_back(i);
+        while (last != (first = find(first, last, value))) {
+            iterators.push_back(first);
+            ++first;
         }
         return iterators;
     }
@@ -274,7 +276,7 @@ private:
         }
         return player_chess[0];
     }
-    void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const {
+    vector<Move> get_valid_move(int x, int y) const {
         vector<Move> temp_moves;
         // get all valiable moves.
         const vector<pair<int, int>> directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1},
@@ -283,7 +285,7 @@ private:
             if (x + direc.first < 6 && x + direc.first >= 0 &&
                     y + direc.second < 6 && y + direc.second >= 0 &&
                     board[ BOARD_SIZE * (y + direc.second) + x + direc.first] == ChessType::Null) {
-                inserter = {1,{x,y},{x + direc.first, y + direc.second}};
+                temp_moves.push_back({1,{x,y},{x + direc.first, y + direc.second}});
             }
         }
         // now we check can we eat something.
@@ -293,14 +295,15 @@ private:
             auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), inner);
             if (move.is_activated) temp_moves.push_back(move);
             move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(inner) - 1);
-            if (move.is_activated) inserter = move;
+            if (move.is_activated) temp_moves.push_back(move);
         }
         for(auto &outer: outers) {
             auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), outer);
             if (move.is_activated) temp_moves.push_back(move);
             move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(outer)- 1);
-            if (move.is_activated) inserter = move;
+            if (move.is_activated) temp_moves.push_back(move);
         }
+        return temp_moves;
     }
     template<typename T>
     Move get_valid_eat_one_direction(T begin, T end, T pos) const {
