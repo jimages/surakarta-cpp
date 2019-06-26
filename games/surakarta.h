@@ -213,12 +213,11 @@ void do_random_move(RandomEngine* engine) {
 
 private:
     template< class InputIt, class T >
-    vector<InputIt> find_all( InputIt first, InputIt last, const T& value ) const {
+    vector<InputIt> find_all( InputIt first, InputIt end, const T& value ) const {
         vector<InputIt> iterators;
-        while (last != (first = find(first, last, value))) {
-            iterators.push_back(first);
-            ++first;
-        }
+        for(auto i = first; i != end; ++i)
+            if (*i == value)
+                iterators.push_back(i);
         return iterators;
     }
     bool can_eat(const decltype(inner_loop)::const_iterator begin, const decltype(inner_loop)::const_iterator end,decltype(inner_loop)::const_iterator curr,
