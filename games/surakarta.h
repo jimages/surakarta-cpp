@@ -276,8 +276,8 @@ private:
     }
     void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const {
         // get all valiable moves.
-        const vector<pair<int, int>> directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1},
-            {-1, 1}, {-1, -1}};
+        const vector<pair<int, int>> directions = {{1, 0}, {-1, 0}, {-1,1}, {0, 1}, {1, 1}, {1, -1},
+            {0, -1}, {-1, -1}};
         for (const auto &direc: directions) {
             if (x + direc.first < 6 && x + direc.first >= 0 &&
                     y + direc.second < 6 && y + direc.second >= 0 &&
