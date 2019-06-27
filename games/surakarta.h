@@ -133,27 +133,27 @@ success:
     player_to_move = 3 - player_to_move;
     return;
 }
-bool has_moves() const {
-    return !get_moves().empty();
-}
-template<typename RandomEngine>
-void do_random_move(RandomEngine* engine) {
-    assert(get_winner() == ChessType::Null);
-    Move m;
-    while (true) {
-        auto moves = get_moves();
-        std::uniform_int_distribution<int> move_idx(static_cast<int>(0),static_cast<int>(moves.size() - 1));
-        decltype(move_idx(*engine)) idx;
-        idx = move_idx(*engine);
-        if (get_winner() == ChessType::Null) {
-            m = moves[idx];
-                do_move(m);
-            } else {
-                return;
-            }
-		}
+    bool has_moves() const {
+        return !get_moves().empty();
     }
-    // Get the result of the match.
+    template<typename RandomEngine>
+    void do_random_move(RandomEngine* engine) {
+        assert(get_winner() == ChessType::Null);
+        Move m;
+        while (true) {
+            auto moves = get_moves();
+            std::uniform_int_distribution<int> move_idx(static_cast<int>(0),static_cast<int>(moves.size() - 1));
+            decltype(move_idx(*engine)) idx;
+            idx = move_idx(*engine);
+            if (get_winner() == ChessType::Null) {
+                m = moves[idx];
+                    do_move(m);
+                } else {
+                    return;
+                }
+            }
+        }
+        // Get the result of the match.
     double get_result(int current_player_to_move) const {
         assert(get_winner() != ChessType::Null);
         auto winner = get_winner();
