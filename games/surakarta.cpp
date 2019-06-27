@@ -36,7 +36,7 @@ bool human_player = true;
 
 MCTS::ComputeOptions player1_options, player2_options;
 player1_options.max_time =  30.0;
-player1_options.number_of_threads = 4;
+player1_options.number_of_threads = 1;
 player1_options.verbose = true;
 player2_options.max_time= 30.0;
     player2_options.number_of_threads = 4;

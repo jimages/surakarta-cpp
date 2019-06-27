@@ -224,16 +224,16 @@ private:
         return iterators;
     }
     template< typename InputIt, class T>
-        vector<typename InputIt::mapped_type> find_all( const InputIt& map, const T& value ) const {
-            vector<typename InputIt::mapped_type> iterators;
+        size_t find_all( const InputIt& map, const T& value, decltype(inner_loop)::const_iterator iters[]) const {
             auto begin_end = map.equal_range(value.first + value.second * BOARD_SIZE);
             auto lower = begin_end.first;
             auto upper = begin_end.second;
-            if (lower != map.cend()) {
-                for (auto i = lower; i != upper; ++i)
-                    iterators.push_back(i->second);
+            size_t n = 0;
+            if (lower != upper) {
+                for (auto i = lower; i != upper; ++i, ++n)
+                    iters[n] = i->second;
             }
-            return iterators;
+            return n;
         }
 
     bool can_eat(const decltype(inner_loop)::const_iterator begin, const decltype(inner_loop)::const_iterator end,decltype(inner_loop)::const_iterator curr,
@@ -301,18 +301,19 @@ private:
             }
         }
         // now we check can we eat something.
-        auto inners = find_all(inner_loop_map, make_pair(x,y));
-        auto outers = find_all(outer_loop_map, make_pair(x,y));
-        for(auto &inner: inners) {
-            auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), inner);
+        decltype(inner_loop)::const_iterator iters[2];
+        auto n = find_all(inner_loop_map, make_pair(x,y), iters);
+        for (auto i = 0; i < n; ++i) {
+            auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), iters[i]);
             if (move.is_activated) inserter = std::move(move);
-            move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(inner) - 1);
+            move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(iters[i]) - 1);
             if (move.is_activated) inserter = std::move(move);
         }
-        for(auto &outer: outers) {
-            auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), outer);
+        n = find_all(outer_loop_map, make_pair(x,y), iters);
+        for (auto i = 0; i < n; ++i) {
+            auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), iters[i]);
             if (move.is_activated) inserter = std::move(move);
-            move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(outer)- 1);
+            move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(iters[i])- 1);
             if (move.is_activated) inserter = std::move(move);
         }
     }
