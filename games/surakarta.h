@@ -172,12 +172,10 @@ void do_random_move(RandomEngine* engine) {
         } else {
             // 利用局部性原理，在用的时候清除
             moves.clear();
-            vector<Move> temp_move;
             for (auto row = 0; row < BOARD_SIZE; ++row)
                 for (auto col = 0; col < BOARD_SIZE; ++col) {
                     if ( board[row * BOARD_SIZE + col] == player_chess[player_to_move]) {
-                        temp_move = get_valid_move(col, row);
-                        moves.insert(moves.end(), temp_move.begin(), temp_move.end());
+                        get_valid_move(col, row, back_inserter(moves));
                     }
                 }
             has_get_moves = true;
@@ -276,8 +274,7 @@ private:
         }
         return player_chess[0];
     }
-    vector<Move> get_valid_move(int x, int y) const {
-        vector<Move> temp_moves;
+    void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const {
         // get all valiable moves.
         const vector<pair<int, int>> directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1},
             {-1, 1}, {-1, -1}};
@@ -285,7 +282,7 @@ private:
             if (x + direc.first < 6 && x + direc.first >= 0 &&
                     y + direc.second < 6 && y + direc.second >= 0 &&
                     board[ BOARD_SIZE * (y + direc.second) + x + direc.first] == ChessType::Null) {
-                temp_moves.push_back({1,{x,y},{x + direc.first, y + direc.second}});
+                inserter = {1,{x,y},{x + direc.first, y + direc.second}};
             }
         }
         // now we check can we eat something.
@@ -293,17 +290,16 @@ private:
         auto outers = find_all(outer_loop.cbegin(), outer_loop.cend(), make_pair(x,y));
         for(auto &inner: inners) {
             auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), inner);
-            if (move.is_activated) temp_moves.push_back(move);
+            if (move.is_activated) inserter = std::move(move);
             move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(inner) - 1);
-            if (move.is_activated) temp_moves.push_back(move);
+            if (move.is_activated) inserter = std::move(move);
         }
         for(auto &outer: outers) {
             auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), outer);
-            if (move.is_activated) temp_moves.push_back(move);
+            if (move.is_activated) inserter = std::move(move);
             move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(outer)- 1);
-            if (move.is_activated) temp_moves.push_back(move);
+            if (move.is_activated) inserter = std::move(move);
         }
-        return temp_moves;
     }
     template<typename T>
     Move get_valid_eat_one_direction(T begin, T end, T pos) const {
