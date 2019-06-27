@@ -29,11 +29,15 @@ ENABLE_TESTING()
 #
 # The CACHE STRING logic here and elsewhere is needed to force CMake
 # to pay attention to the value of these variables.
+
+IF(NOT CMAKE_BUILD_TYPE)
 SET(CMAKE_BUILD_TYPE Release CACHE STRING
     "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
     FORCE)
+ENDIF()
+MESSAGE("-- The Build type is ${CMAKE_BUILD_TYPE}")
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -Og")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-Ofast")
 SET (MY_LIBRARY_DEPENDENCIES)
 

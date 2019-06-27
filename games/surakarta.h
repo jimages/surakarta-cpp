@@ -35,6 +35,9 @@ public:
 
     static const vector<pair<int, int>> outer_loop;
     static const vector<pair<int, int>> inner_loop;
+    // a map to speedup the search.
+    static multimap<pair<int, int>, decltype(outer_loop)::const_iterator> outer_loop_map;
+    static multimap<pair<int, int>, decltype(inner_loop)::const_iterator> inner_loop_map;
 
     static const Move no_move;
 
@@ -219,6 +222,18 @@ private:
                 iterators.push_back(i);
         return iterators;
     }
+    template< typename InputIt, class T>
+        vector<typename InputIt::mapped_type> find_all( const InputIt& map, const T& value ) const {
+            vector<typename InputIt::mapped_type> iterators;
+            auto lower = map.lower_bound(value);
+            auto upper = map.upper_bound(value);
+            if (lower != map.cend()) {
+                for (auto i = lower; i != upper; ++i)
+                    iterators.push_back(i->second);
+            }
+            return iterators;
+        }
+
     bool can_eat(const decltype(inner_loop)::const_iterator begin, const decltype(inner_loop)::const_iterator end,decltype(inner_loop)::const_iterator curr,
             decltype(inner_loop)::const_iterator tart) const {
         auto former = curr > tart? tart: curr;
@@ -286,8 +301,8 @@ private:
             }
         }
         // now we check can we eat something.
-        auto inners = find_all(inner_loop.cbegin(), inner_loop.cend(), make_pair(x,y));
-        auto outers = find_all(outer_loop.cbegin(), outer_loop.cend(), make_pair(x,y));
+        auto inners = find_all(inner_loop_map, make_pair(x,y));
+        auto outers = find_all(outer_loop_map, make_pair(x,y));
         for(auto &inner: inners) {
             auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), inner);
             if (move.is_activated) inserter = std::move(move);

@@ -3,6 +3,7 @@
 #include <vector>
 #include <utility>
 #include <iostream>
+#include <map>
 const char SurakartaState::player_markers[] = {'*', 'R', 'B'};
 const SurakartaState::ChessType SurakartaState::player_chess[] = {SurakartaState::ChessType::Null, SurakartaState::ChessType::Red, SurakartaState::ChessType::Black};
 const std::vector<std::pair<int, int>> SurakartaState::outer_loop = {{1,0}, {0,1}, {1,1},
@@ -14,10 +15,20 @@ const std::vector<std::pair<int, int>> SurakartaState::inner_loop = {{2, 0}, {0,
     {5, 3}, {4, 3}, {3, 3}, {2, 3}, {1, 3}, {0, 3}, {2, 5}, {2, 4}, {2, 3}, {2, 2},
    {2, 1}};
 const SurakartaState::Move SurakartaState::no_move = {0,{0,0},{0,0}};
+multimap<pair<int, int>, decltype(SurakartaState::outer_loop)::const_iterator> SurakartaState::outer_loop_map;
+multimap<pair<int, int>, decltype(SurakartaState::inner_loop)::const_iterator> SurakartaState::inner_loop_map;
+
 using namespace std;
 void main_program()
 {
 	using namespace std;
+    // init the loop map
+    for (auto i = SurakartaState::inner_loop.cbegin(); i != SurakartaState::inner_loop.cend();  ++i) {
+        SurakartaState::inner_loop_map.emplace(*i,i);
+    }
+    for (auto i = SurakartaState::outer_loop.cbegin(); i != SurakartaState::outer_loop.cend();  ++i) {
+        SurakartaState::outer_loop_map.emplace(*i,i);
+    }
 
 	bool human_player = true;
 
