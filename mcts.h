@@ -51,7 +51,7 @@ namespace MCTS
 struct ComputeOptions
 {
 	int number_of_threads = 8;
-	int max_iterations = 10000;
+	int max_iterations = -1.0;
 	double max_time = -1.0; // default is no time limit
 	bool verbose = false;
 
