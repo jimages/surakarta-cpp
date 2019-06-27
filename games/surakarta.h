@@ -141,7 +141,7 @@ success:
         assert(get_winner() == ChessType::Null);
         Move m;
         while (true) {
-            auto moves = get_moves();
+            get_moves();
             std::uniform_int_distribution<int> move_idx(static_cast<int>(0),static_cast<int>(moves.size() - 1));
             decltype(move_idx(*engine)) idx;
             idx = move_idx(*engine);
