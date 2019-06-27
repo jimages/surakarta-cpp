@@ -10,6 +10,7 @@
 #include <omp.h>
 #include <cmath>
 #include <iostream>
+#include <unordered_map>
 
 using namespace std;
 
@@ -36,8 +37,8 @@ public:
     static const vector<pair<int, int>> outer_loop;
     static const vector<pair<int, int>> inner_loop;
     // a map to speedup the search.
-    static multimap<pair<int, int>, decltype(outer_loop)::const_iterator> outer_loop_map;
-    static multimap<pair<int, int>, decltype(inner_loop)::const_iterator> inner_loop_map;
+    static unordered_multimap<int, decltype(outer_loop)::const_iterator> outer_loop_map;
+    static unordered_multimap<int, decltype(inner_loop)::const_iterator> inner_loop_map;
 
     static const Move no_move;
 
@@ -225,8 +226,9 @@ private:
     template< typename InputIt, class T>
         vector<typename InputIt::mapped_type> find_all( const InputIt& map, const T& value ) const {
             vector<typename InputIt::mapped_type> iterators;
-            auto lower = map.lower_bound(value);
-            auto upper = map.upper_bound(value);
+            auto begin_end = map.equal_range(value.first + value.second * BOARD_SIZE);
+            auto lower = begin_end.first;
+            auto upper = begin_end.second;
             if (lower != map.cend()) {
                 for (auto i = lower; i != upper; ++i)
                     iterators.push_back(i->second);
@@ -291,8 +293,6 @@ private:
     }
     void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const {
         // get all valiable moves.
-        const vector<pair<int, int>> directions = {{1, 0}, {-1, 0}, {-1,1}, {0, 1}, {1, 1}, {1, -1},
-            {0, -1}, {-1, -1}};
         for (const auto &direc: directions) {
             if (x + direc.first < 6 && x + direc.first >= 0 &&
                     y + direc.second < 6 && y + direc.second >= 0 &&
@@ -333,6 +333,7 @@ private:
         return {0, {pos->first, pos->second}, {pos->first, pos->second}};
     }
     ChessType board[BOARD_SIZE * BOARD_SIZE];
+    static const vector<pair<int, int>> directions;
     mutable bool has_get_moves = false;
     mutable vector<Move> moves;
 };
