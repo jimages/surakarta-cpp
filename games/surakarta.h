@@ -180,6 +180,7 @@ void do_random_move(RandomEngine* engine) {
                         moves.insert(moves.end(), temp_move.begin(), temp_move.end());
                     }
                 }
+            has_get_moves = true;
             return moves;
         }
     }
