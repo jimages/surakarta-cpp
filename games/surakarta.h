@@ -37,8 +37,8 @@ public:
     static const vector<pair<int, int>> outer_loop;
     static const vector<pair<int, int>> inner_loop;
     // a map to speedup the search.
-    static unordered_multimap<int, decltype(outer_loop)::const_iterator> outer_loop_map;
-    static unordered_multimap<int, decltype(inner_loop)::const_iterator> inner_loop_map;
+    static const int_fast16_t outer_loop_map[];
+    static const int_fast16_t inner_loop_map[];
 
     static const Move no_move;
 
@@ -223,18 +223,28 @@ private:
                 iterators.push_back(i);
         return iterators;
     }
-    template< typename InputIt, class T>
-        size_t find_all( const InputIt& map, const T& value, decltype(inner_loop)::const_iterator iters[]) const {
-            auto begin_end = map.equal_range(value.first + value.second * BOARD_SIZE);
-            auto lower = begin_end.first;
-            auto upper = begin_end.second;
-            size_t n = 0;
-            if (lower != upper) {
-                for (auto i = lower; i != upper; ++i, ++n)
-                    iters[n] = i->second;
-            }
-            return n;
+    size_t find_all(bool is_inner,  int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const {
+        const int_fast16_t *map;
+        decltype(inner_loop)::const_iterator target_iters;
+        if (is_inner) {
+            map = inner_loop_map;
+            target_iters = inner_loop.cbegin();
+        } else {
+            map = outer_loop_map;
+            target_iters = outer_loop.cbegin();
         }
+        int_fast16_t target = map[x + y * BOARD_SIZE];
+        if (target == -1)
+            return 0;
+        else if (target > 23) {
+            iters[0] = target_iters + (target & 0x1F);
+            iters[1] = target_iters + ((target & 0x3E0) >> 5);
+            return 2;
+        } else {
+            iters[0] = target_iters + (target & 0x1F);
+            return 1;
+        }
+    }
 
     bool can_eat(const decltype(inner_loop)::const_iterator begin, const decltype(inner_loop)::const_iterator end,decltype(inner_loop)::const_iterator curr,
             decltype(inner_loop)::const_iterator tart) const {
@@ -302,18 +312,18 @@ private:
         }
         // now we check can we eat something.
         decltype(inner_loop)::const_iterator iters[2];
-        auto n = find_all(inner_loop_map, make_pair(x,y), iters);
+        auto n = find_all(true, x,y, iters);
         for (auto i = 0; i < n; ++i) {
             auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), iters[i]);
             if (move.is_activated) inserter = std::move(move);
             move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(iters[i]) - 1);
             if (move.is_activated) inserter = std::move(move);
         }
-        n = find_all(outer_loop_map, make_pair(x,y), iters);
+        n = find_all(false, x,y, iters);
         for (auto i = 0; i < n; ++i) {
             auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), iters[i]);
             if (move.is_activated) inserter = std::move(move);
-            move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(iters[i])- 1);
+            move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(iters[i]) - 1);
             if (move.is_activated) inserter = std::move(move);
         }
     }
