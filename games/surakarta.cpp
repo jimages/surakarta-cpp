@@ -22,6 +22,7 @@ const int_fast16_t SurakartaState::inner_loop_map[] = {-1, -1, 0, 7, -1, -1, -1,
 const vector<pair<int, int>> SurakartaState::directions = {{1, 0}, {-1, 0}, {-1,1}, {0, 1}, {1, 1}, {1, -1},
     {0, -1}, {-1, -1}};
 
+const uint_fast8_t SurakartaState::arc_map[] = {0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0};
 using namespace std;
 void main_program()
 {

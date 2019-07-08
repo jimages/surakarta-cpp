@@ -40,6 +40,8 @@ public:
     static const int_fast16_t outer_loop_map[];
     static const int_fast16_t inner_loop_map[];
 
+    static const uint_fast8_t arc_map[];
+
     static const Move no_move;
 
     static const char player_markers[3];
@@ -329,10 +331,15 @@ private:
     }
     template<typename T>
     Move get_valid_eat_one_direction(T begin, T end, T pos) const {
+        uint8_t has_passed_arc = false;
+        if (arc_map[pos->first + pos->second * BOARD_SIZE])
+            has_passed_arc = true;
         for(auto i = pos + 1; i != pos; ++i) {
             if (i == end) i = begin;
             if (i == pos) break;
-            if (board[BOARD_SIZE * i->second + i->first] == player_chess[ 3 - player_to_move]) {
+            if (!has_passed_arc && arc_map[pos->first + pos->second * BOARD_SIZE])
+                has_passed_arc = true;
+            if (has_passed_arc && board[BOARD_SIZE * i->second + i->first] == player_chess[ 3 - player_to_move])  {
                 return {1, {pos->first, pos->second}, {i->first, i->second}};
             } else if (board[BOARD_SIZE * i->second + i->first] == ChessType::Null) {
                 continue;
