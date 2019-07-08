@@ -93,14 +93,6 @@ using std::endl;
 using std::vector;
 using std::size_t;
 
-static void assertion_failed(const char* expr, const char* file, int line);
-
-#define attest(expr) if (!(expr)) { ::MCTS::assertion_failed(#expr, __FILE__, __LINE__); }
-#ifndef NDEBUG
-	#define dattest(expr) if (!(expr)) { ::MCTS::assertion_failed(#expr, __FILE__, __LINE__); }
-#else
-	#define dattest(expr) ((void)0)
-#endif
 
 //
 // This class is used to build the game tree. The root is created by the users and
@@ -200,7 +192,7 @@ template<typename State>
 template<typename RandomEngine>
 typename State::Move Node<State>::get_untried_move(RandomEngine* engine) const
 {
-	attest( ! moves.empty());
+	assert( ! moves.empty());
 	std::uniform_int_distribution<std::size_t> moves_distribution(0, moves.size() - 1);
 	return moves[moves_distribution(*engine)];
 }
@@ -208,8 +200,8 @@ typename State::Move Node<State>::get_untried_move(RandomEngine* engine) const
 template<typename State>
 Node<State>* Node<State>::best_child() const
 {
-	attest(moves.empty());
-	attest( ! children.empty() );
+	assert(moves.empty());
+	assert( ! children.empty() );
 
 	return *std::max_element(children.begin(), children.end(),
 		[](Node* a, Node* b) { return a->visits < b->visits; });;
@@ -218,7 +210,7 @@ Node<State>* Node<State>::best_child() const
 template<typename State>
 Node<State>* Node<State>::select_child_UCT() const
 {
-	attest( ! children.empty() );
+	assert( ! children.empty() );
 	for (auto child: children) {
 		child->UCT_score = double(child->wins) / double(child->visits) +
 			std::sqrt(2.0 * std::log(double(this->visits)) / child->visits);
@@ -299,20 +291,13 @@ std::unique_ptr<Node<State>>  compute_tree(const State root_state,
 {
 	std::mt19937_64 random_engine(initial_seed);
 
-	attest(options.max_iterations >= 0 || options.max_time >= 0);
-	if (options.max_time >= 0) {
-		#ifndef USE_OPENMP
-		throw std::runtime_error("ComputeOptions::max_time requires OpenMP.");
-		#endif
-	}
+	assert(options.max_iterations >= 0 || options.max_time >= 0);
 	// Will support more players later.
-	attest(root_state.player_to_move == 1 || root_state.player_to_move == 2);
+	assert(root_state.player_to_move == 1 || root_state.player_to_move == 2);
 	auto root = std::unique_ptr<Node<State>>(new Node<State>(root_state));
 
-	#ifdef USE_OPENMP
 	double start_time = ::omp_get_wtime();
 	double print_time = start_time;
-	#endif
 
 	for (int iter = 1; iter <= options.max_iterations || options.max_iterations < 0; ++iter) {
 		auto node = root.get();
@@ -344,7 +329,6 @@ std::unique_ptr<Node<State>>  compute_tree(const State root_state,
 			node = node->parent;
 		}
 
-		#ifdef USE_OPENMP
 		if (options.verbose || options.max_time >= 0) {
 			double time = ::omp_get_wtime();
 			if (options.verbose && (time - print_time >= 1.0 || iter == options.max_iterations)) {
@@ -356,7 +340,6 @@ std::unique_ptr<Node<State>>  compute_tree(const State root_state,
 				break;
 			}
 		}
-		#endif
 	}
 
 	return root;
@@ -369,17 +352,15 @@ typename State::Move compute_move(const State root_state,
 	using namespace std;
 
 	// Will support more players later.
-	attest(root_state.player_to_move == 1 || root_state.player_to_move == 2);
+	assert(root_state.player_to_move == 1 || root_state.player_to_move == 2);
 
 	auto moves = root_state.get_moves();
-	attest(moves.size() > 0);
+	assert(moves.size() > 0);
 	if (moves.size() == 1) {
 		return moves[0];
 	}
 
-	#ifdef USE_OPENMP
 	double start_time = ::omp_get_wtime();
-	#endif
 
 	// Start all jobs to compute trees.
 	vector<future<unique_ptr<Node<State>>>> root_futures;
@@ -444,38 +425,18 @@ typename State::Move compute_move(const State root_state,
 		     << " (" << 100.0 * best_wins / best_visits << "% wins)" << endl;
 	}
 
-	#ifdef USE_OPENMP
 	if (options.verbose) {
 		double time = ::omp_get_wtime();
 		std::cerr << games_played << " games played in " << double(time - start_time) << " s. "
 		          << "(" << double(games_played) / (time - start_time) << " / second, "
 		          << options.number_of_threads << " parallel jobs)." << endl;
 	}
-	#endif
 
 	return best_move;
 }
 
 /////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////
-
-
-static void assertion_failed(const char* expr, const char* file_cstr, int line)
-{
-	using namespace std;
-
-	// Extract the file name only.
-	string file(file_cstr);
-	auto pos = file.find_last_of("/\\");
-	if (pos == string::npos) {
-		pos = 0;
-	}
-	file = file.substr(pos + 1);  // Returns empty string if pos + 1 == length.
-
-	stringstream sout;
-	sout << "Assertion failed: " << expr << " in " << file << ":" << line << ".";
-	throw runtime_error(sout.str().c_str());
-}
 
 }
 
