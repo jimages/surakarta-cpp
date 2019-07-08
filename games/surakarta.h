@@ -164,9 +164,9 @@ success:
         assert(get_winner() != ChessType::Null);
         auto winner = get_winner();
         if (winner == player_chess[current_player_to_move])
-            return 1.0;
-        else
             return 0.0;
+        else
+            return 1.0;
     }
 
     // Get all available move.
