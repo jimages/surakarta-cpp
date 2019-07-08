@@ -14,9 +14,11 @@ const std::vector<std::pair<int, int>> SurakartaState::inner_loop = {{2, 0}, {0,
     {2, 2}, {3, 2}, {4, 2}, {5, 2}, {3, 0}, {3, 1}, {3, 2}, {3, 3}, {3, 4}, {3, 5},
     {5, 3}, {4, 3}, {3, 3}, {2, 3}, {1, 3}, {0, 3}, {2, 5}, {2, 4}, {2, 3}, {2, 2},
     {2, 1}};
+
 const SurakartaState::Move SurakartaState::no_move = {0,{0,0},{0,0}};
 const int_fast16_t SurakartaState::outer_loop_map[] = {-1, 0, -1, -1, 7, -1, 1, 87, 3, 4, 168, 6, -1, 22, -1, -1, 9, -1, -1, 21, -1, -1, 10, -1, 18, 564, 16, 15, 366, 13, -1, 19, -1, -1, 12, -1};
 const int_fast16_t SurakartaState::inner_loop_map[] = {-1, -1, 0, 7, -1, -1, -1, -1, 23, 8, -1, -1, 1, 2, 118, 137, 5, 6, 18, 17, 533, 335, 14, 13, -1, -1, 20, 11, -1, -1, -1, -1, 19, 12, -1, -1};
+
 const vector<pair<int, int>> SurakartaState::directions = {{1, 0}, {-1, 0}, {-1,1}, {0, 1}, {1, 1}, {1, -1},
     {0, -1}, {-1, -1}};
 

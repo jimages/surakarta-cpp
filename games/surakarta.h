@@ -361,8 +361,8 @@ inline istream& operator>>(istream& in, SurakartaState::Move &move)
     move.is_activated = 1;
     move.current.first = cur_x;
     move.current.second = cur_y;
-    move.target.first = cur_x;
-    move.target.second = cur_y;
+    move.target.first = tar_x;
+    move.target.second = tar_y;
     return in;
 }
 inline ostream& operator<<(ostream &out, const SurakartaState::Move &move)
