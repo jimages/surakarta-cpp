@@ -308,20 +308,33 @@ private:
         bool flag = 0;
         decltype(inner_loop)::const_iterator iters[2];
         auto n = find_all(true, x,y, iters);
-        if (n) flag |= 1;
         for (auto i = 0; i < n; ++i) {
             auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), iters[i]);
-            if (move.is_activated) inserter = std::move(move);
+            if (move.is_activated) {
+                inserter = std::move(move);
+                flag |= 1;
+            }
             move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(iters[i]) - 1);
-            if (move.is_activated) inserter = std::move(move);
+            if (move.is_activated)
+            {
+                inserter = std::move(move);
+                flag |= 1;
+            }
         }
         n = find_all(false, x,y, iters);
-        if (n) flag |= 1;
         for (auto i = 0; i < n; ++i) {
             auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), iters[i]);
-            if (move.is_activated) inserter = std::move(move);
+            if (move.is_activated)
+            {
+                inserter = std::move(move);
+                flag |= 1;
+            }
             move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(iters[i]) - 1);
-            if (move.is_activated) inserter = std::move(move);
+            if (move.is_activated)
+            {
+                inserter = std::move(move);
+                flag |= 1;
+            }
         }
         if (flag) return;
 
