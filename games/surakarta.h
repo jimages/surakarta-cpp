@@ -170,7 +170,7 @@ success:
     }
 
     // Get all available move.
-    std::vector<Move> get_moves() const
+    std::vector<Move>& get_moves() const
     {
         PR_ASSERT();
         if (has_get_moves) {
@@ -304,17 +304,11 @@ private:
         return player_chess[0];
     }
     void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const {
-        // get all valiable moves.
-        for (const auto &direc: directions) {
-            if (x + direc.first < 6 && x + direc.first >= 0 &&
-                    y + direc.second < 6 && y + direc.second >= 0 &&
-                    board[ BOARD_SIZE * (y + direc.second) + x + direc.first] == ChessType::Null) {
-                inserter = {1,{x,y},{x + direc.first, y + direc.second}};
-            }
-        }
         // now we check can we eat something.
+        bool flag = 0;
         decltype(inner_loop)::const_iterator iters[2];
         auto n = find_all(true, x,y, iters);
+        if (n) flag |= 1;
         for (auto i = 0; i < n; ++i) {
             auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), iters[i]);
             if (move.is_activated) inserter = std::move(move);
@@ -322,11 +316,22 @@ private:
             if (move.is_activated) inserter = std::move(move);
         }
         n = find_all(false, x,y, iters);
+        if (n) flag |= 1;
         for (auto i = 0; i < n; ++i) {
             auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), iters[i]);
             if (move.is_activated) inserter = std::move(move);
             move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(iters[i]) - 1);
             if (move.is_activated) inserter = std::move(move);
+        }
+        if (flag) return;
+
+        // get all valiable moves.
+        for (const auto &direc: directions) {
+            if (x + direc.first < 6 && x + direc.first >= 0 &&
+                    y + direc.second < 6 && y + direc.second >= 0 &&
+                    board[ BOARD_SIZE * (y + direc.second) + x + direc.first] == ChessType::Null) {
+                inserter = {1,{x,y},{x + direc.first, y + direc.second}};
+            }
         }
     }
     template<typename T>

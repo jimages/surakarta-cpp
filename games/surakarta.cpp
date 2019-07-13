@@ -26,15 +26,16 @@ const uint_fast8_t SurakartaState::arc_map[] = {0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0,
 using namespace std;
 void main_program()
 {
-using namespace std;
+    using namespace std;
 
-bool human_player = true;
+    bool human_player = true;
 
-MCTS::ComputeOptions player1_options, player2_options;
-player1_options.max_time =  30.0;
-player1_options.number_of_threads = 1;
-player1_options.verbose = true;
-player2_options.max_time= 30.0;
+    MCTS::ComputeOptions player1_options, player2_options;
+    player1_options.max_time =  10.0;
+    player1_options.number_of_threads = 8;
+    player1_options.verbose = true;
+
+    player2_options.max_time= 30.0;
     player2_options.number_of_threads = 4;
 	player2_options.verbose = true;
 
