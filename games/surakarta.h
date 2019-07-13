@@ -12,7 +12,20 @@
 #include <iostream>
 #include <unordered_map>
 
-using namespace std;
+using std::vector;
+using std::pair;
+using std::back_inserter;
+using std::back_insert_iterator;
+using std::count;
+using std::cout;
+using std::find;
+using std::begin;
+using std::end;
+using std::endl;
+using std::cout;
+using std::ostream;
+using std::istream;
+using std::runtime_error;
 
 #include <mcts.h>
 
@@ -396,8 +409,8 @@ inline istream& operator>>(istream& in, SurakartaState::Move &move)
 }
 inline ostream& operator<<(ostream &out, const SurakartaState::Move &move)
 {
-    out << "from" << move.current.first << " " << move.current.second
-        << "to" << move.target.first << " " << move.target.second;
+    out << move.current.first << " " << move.current.second <<
+        " " << move.target.first << " " << move.target.second;
     return out;
 }
 inline bool operator!=(const SurakartaState::Move lhs, const SurakartaState::Move rhs)
