@@ -41,6 +41,7 @@ class SurakartaState
 {
 public:
     enum ChessType : char{ Red = 1, Black = 2, Null = 0};
+    ChessType board[BOARD_SIZE * BOARD_SIZE];
     typedef struct {
         bool is_activated; // is the movable
         pair<int, int> current, target;
@@ -59,6 +60,11 @@ public:
 
     static const char player_markers[3];
     static const ChessType player_chess[3];
+
+    void clean_moves() const {
+        moves.clear();
+        has_get_moves = false;
+    }
 
     SurakartaState():
         player_to_move(1)
@@ -173,7 +179,7 @@ success:
             }
         }
         // Get the result of the match.
-    double get_result(int current_player_to_move) const {
+    int get_result(int current_player_to_move) const {
         assert(get_winner() != ChessType::Null);
         auto winner = get_winner();
         if (winner == player_chess[current_player_to_move])
@@ -183,7 +189,7 @@ success:
     }
 
     // Get all available move.
-    std::vector<Move>& get_moves() const
+    std::vector<Move> get_moves() const
     {
         PR_ASSERT();
         if (has_get_moves) {
@@ -385,7 +391,6 @@ private:
         }
         return {0, {pos->first, pos->second}, {pos->first, pos->second}};
     }
-    ChessType board[BOARD_SIZE * BOARD_SIZE];
     static const vector<pair<int, int>> directions;
     mutable bool has_get_moves = false;
     mutable vector<Move> moves;

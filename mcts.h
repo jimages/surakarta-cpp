@@ -81,6 +81,7 @@ typename State::Move compute_move(const State root_state,
 #include <string>
 #include <thread>
 #include <vector>
+#include <mpi.h>
 
 #ifdef USE_OPENMP
 #include <omp.h>
@@ -105,7 +106,6 @@ public:
 	typedef typename State::Move Move;
 
 	explicit Node(const State& state);
-	~Node();
 
 	bool has_untried_moves() const;
 	template<typename RandomEngine>
@@ -117,8 +117,8 @@ public:
 		return ! children.empty();
 	}
 
-	Node* select_child_UCT() const;
-	Node* add_child(const Move& move, const State& state);
+    std::shared_ptr<Node> select_child_UCT() const;
+    std::shared_ptr<Node> add_child(const Move& move, const State& state);
 	void update(double result);
 
 	std::string to_string() const;
@@ -134,15 +134,15 @@ public:
 	int visits;
 
 	std::vector<Move> moves;
-	std::vector<Node*> children;
+	std::vector<std::shared_ptr<Node>> children;
+	Node(const Node&) = default;
+	Node& operator = (const Node&);
 
 private:
 	Node(const State& state, const Move& move, Node* parent);
 
 	std::string indent_string(int indent) const;
 
-	Node(const Node&);
-	Node& operator = (const Node&);
 
 	double UCT_score;
 };
@@ -175,14 +175,6 @@ Node<State>::Node(const State& state, const Move& move_, Node* parent_) :
 { }
 
 template<typename State>
-Node<State>::~Node()
-{
-	for (auto child: children) {
-		delete child;
-	}
-}
-
-template<typename State>
 bool Node<State>::has_untried_moves() const
 {
 	return ! moves.empty();
@@ -208,7 +200,7 @@ Node<State>* Node<State>::best_child() const
 }
 
 template<typename State>
-Node<State>* Node<State>::select_child_UCT() const
+std::shared_ptr<Node<State>> Node<State>::select_child_UCT() const
 {
 	assert( ! children.empty() );
 	for (auto child: children) {
@@ -217,13 +209,13 @@ Node<State>* Node<State>::select_child_UCT() const
 	}
 
 	return *std::max_element(children.begin(), children.end(),
-		[](Node* a, Node* b) { return a->UCT_score < b->UCT_score; });
+		[](std::shared_ptr<Node<State>> a, std::shared_ptr<Node<State>> b) { return a->UCT_score < b->UCT_score; });
 }
 
 template<typename State>
-Node<State>* Node<State>::add_child(const Move& move, const State& state)
+std::shared_ptr<Node<State>> Node<State>::add_child(const Move& move, const State& state)
 {
-	auto node = new Node(state, move, this);
+    std::shared_ptr<Node<State>> node(new Node<State>(state, move, this));
 	children.push_back(node);
 	assert(!children.empty());
 
@@ -305,7 +297,7 @@ std::unique_ptr<Node<State>>  compute_tree(const State root_state,
 
 		// Select a path through the tree to a leaf node.
 		while (!node->has_untried_moves() && node->has_children()) {
-			node = node->select_child_UCT();
+			node = node->select_child_UCT().get();
 			state.do_move(node->move);
 		}
 
@@ -314,7 +306,7 @@ std::unique_ptr<Node<State>>  compute_tree(const State root_state,
 		if (node->has_untried_moves()) {
 			auto move = node->get_untried_move(&random_engine);
 			state.do_move(move);
-			node = node->add_child(move, state);
+			node = node->add_child(move, state).get();
 		}
 
 		// We now play randomly until the game ends.
@@ -433,6 +425,104 @@ typename State::Move compute_move(const State root_state,
 	}
 
 	return best_move;
+}
+
+
+template<typename State>
+Node<State> compute_node(Node<State>& root_node, const State root_state,
+                                  const ComputeOptions &options)
+{
+	using namespace std;
+
+	// Will support more players later.
+	assert(root_state.player_to_move == 1 || root_state.player_to_move == 2);
+    assert(root_node.children.size() > 0);
+
+	auto moves = root_state.get_moves();
+	assert(moves.size() > 0);
+	if (moves.size() == 1) {
+		return root_node;
+	}
+
+	// Start all jobs to compute trees.
+	vector<future<unique_ptr<Node<State>>>> root_futures;
+	ComputeOptions job_options = options;
+	job_options.verbose = false;
+	for (int t = 0; t < options.number_of_threads; ++t) {
+		auto func = [t, &root_state, &job_options] () -> std::unique_ptr<Node<State>>
+		{
+			return compute_tree(root_state, job_options, 1012411 * t + 12515);
+		}; // lambda 函数
+
+		root_futures.push_back(std::async(std::launch::async, func));
+	}
+
+	// 将多个对局的结果合并成一个新的结果.
+	vector<unique_ptr<Node<State>>> roots;
+	for (int t = 0; t < options.number_of_threads; ++t) {
+		roots.push_back(std::move(root_futures[t].get()));
+	}
+
+	// Merge the children of all root nodes.
+	long long games_played = 0;
+	for (int t = 0; t < options.number_of_threads; ++t) {
+		games_played += roots[t]->visits;
+		for (auto idx = 0; idx < root_node.children.size(); ++idx) {
+			root_node.children[idx]->visits += roots[t]->children[idx]->visits;
+			root_node.children[idx]->wins   += roots[t]->children[idx]->wins;
+		}
+	}
+
+    return root_node;
+}
+template<typename State>
+typename State::Move best_move(Node<State> root_node, ComputeOptions& options) {
+    // Find the node with the highest score.
+    using namespace std;
+	double best_score = -1;
+    double best_wins = 0;
+    int best_visits = 0;
+	typename State::Move best_move = typename State::Move();
+    int games_played = 0;
+    for (auto &child: root_node.children) {
+        games_played += child->visits;
+    }
+	for (auto &child: root_node.children) {
+		auto move = child->move;
+		double v = child->visits;
+		double w = child->wins;
+		// Expected success rate assuming a uniform prior (Beta(1, 1)).
+		// https://en.wikipedia.org/wiki/Beta_distribution
+		double expected_success_rate = (w + 1) / (v + 2);
+		if (expected_success_rate > best_score) {
+			best_move = move;
+			best_score = expected_success_rate;
+		}
+
+		if (options.verbose) {
+			cerr << "Move: " << move
+			     << " (" << setw(2) << right << int(100.0 * v / double(games_played) + 0.5) << "% visits)"
+			     << " (" << setw(2) << right << int(100.0 * w / v + 0.5)    << "% wins)" << endl;
+		}
+	}
+
+	if (options.verbose) {
+		cerr << "----" << endl;
+		cerr << "Best: " << best_move
+		     << " (" << 100.0 * best_visits / double(games_played) << "% visits)"
+		     << " (" << 100.0 * best_wins / best_visits << "% wins)" << endl;
+	}
+    int size;
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+	if (options.verbose) {
+		std::cerr << games_played << " games played in " << options.max_time << " s. "
+		          << "(" << double(games_played) / options.max_time << " / second, "
+		          << size << " parallel host)." << endl;
+	}
+
+	return best_move;
+
 }
 
 /////////////////////////////////////////////////////////

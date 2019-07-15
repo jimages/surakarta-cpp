@@ -65,7 +65,19 @@ void tosocket(int fd, SurakartaState::Move move) {
 int main(int argc, char *argv[])
 {
     MPI_Init(&argc, &argv);
-	try {
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &size);
+
+    MCTS::ComputeOptions player_options;
+    player_options.max_time =  10.0;
+    player_options.number_of_threads = omp_get_num_procs();
+    player_options.verbose = true;
+
+    SurakartaState state;
+
+    // master setup the initialize.
+    if (rank == 0) {
         auto serverfd = socket(AF_INET, SOCK_STREAM, 0);
         if (serverfd == -1) {
             perror(strerror(errno));
@@ -78,7 +90,7 @@ int main(int argc, char *argv[])
         bool self_play = false;
         bool counter_first = false;
         bool should_move = false;
-        bool net_competition = true;
+        bool net_competition = false;
 
 
         if (self_play || !counter_first) {
@@ -103,24 +115,40 @@ int main(int argc, char *argv[])
                 send(fd, static_cast<const void *>("1"), static_cast<size_t>(1), 0);
         }
 
-        MCTS::ComputeOptions player1_options, player2_options;
-        player1_options.max_time =  10.0;
-        player1_options.number_of_threads = 8;
-        player1_options.verbose = true;
-
-        player2_options.max_time= 30.0;
-        player2_options.number_of_threads = 4;
-        player2_options.verbose = true;
-
-        SurakartaState state;
         state.player_to_move = 1;
         while (state.has_moves()) {
             cout << endl << "State: " << state << endl;
 
             SurakartaState::Move move = SurakartaState::no_move;
             if (should_move) {
-                    move = MCTS::compute_move(state, player1_options);
-                    state.do_move(move);
+                    // passing the player_to_move
+                    MPI_Barrier(MPI_COMM_WORLD);
+                    MPI_Bcast(&state.player_to_move, 1, MPI_INT, 0, MPI_COMM_WORLD);
+                    // passing the board
+                    MPI_Barrier(MPI_COMM_WORLD);
+                    MPI_Bcast(state.board, sizeof(state.board), MPI_CHAR, 0, MPI_COMM_WORLD);
+                    // Gather the all valid move
+                    MCTS::Node<SurakartaState> root_node(state);
+                    for(auto &move: state.get_moves()) {
+                        SurakartaState root_state = state;
+                        root_node.add_child(move, root_state);
+                    }
+                    int tmp_visit;
+                    double tmp_win;
+                    int resultint;
+                    double resultdouble;
+                    for(auto &child: root_node.children) {
+                        tmp_visit = child->visits;
+                        tmp_win = child->wins;
+                        MPI_Reduce(&tmp_visit, &resultint, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+                        MPI_Reduce(&tmp_win, &resultdouble, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+                        child->visits = resultint;
+                        child->wins = resultdouble;
+                        MPI_Barrier(MPI_COMM_WORLD);
+                    }
+                    //move = MCTS::compute_move(state, player_options);
+                    auto best_move = MCTS::best_move(root_node, player_options);
+                    state.do_move(best_move);
                     if (net_competition)
                         tosocket(fd, move);
             } else {
@@ -157,10 +185,35 @@ int main(int argc, char *argv[])
             cout << "Nobody wins!" << endl;
         }
         return 0;
-	}
-	catch (std::runtime_error& error) {
-		std::cerr << "ERROR: " << error.what() << std::endl;
-		return -1;
-	}
+    } else {
+        // root parallel.
+        while(true) {
+            MPI_Barrier(MPI_COMM_WORLD);
+            MPI_Bcast(&state.player_to_move, 1, MPI_INT, 0, MPI_COMM_WORLD);
+            state.clean_moves();
+            // passing the board
+            MPI_Barrier(MPI_COMM_WORLD);
+            MPI_Bcast(state.board, sizeof(state.board), MPI_CHAR, 0, MPI_COMM_WORLD);
+
+            MCTS::Node<SurakartaState> root(state);
+            // compute the best move
+            for(auto &move: state.get_moves()) {
+                SurakartaState root_state = state;
+                root.add_child(move, root_state);
+            }
+            MCTS::compute_node(root, state, player_options);
+            int tmp_visit;
+            double tmp_win;
+            int resultint;
+            double resultdouble;
+            for(auto &child: root.children) {
+                tmp_visit = child->visits;
+                tmp_win = child->wins;
+                MPI_Reduce(&tmp_visit, &resultint, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+                MPI_Reduce(&tmp_win, &resultdouble, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+                MPI_Barrier(MPI_COMM_WORLD);
+            }
+        }
+    }
     MPI_Finalize();
 }
