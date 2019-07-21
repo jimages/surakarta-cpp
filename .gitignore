@@ -45,3 +45,4 @@ _deps
 
 bin/
 *.swp
+.vscode/
