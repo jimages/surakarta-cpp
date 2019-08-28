@@ -1,0 +1,45 @@
+#ifndef POLICY_VALUE_MODEL_H
+#define POLICY_VALUE_MODEL_H
+#include <utility>
+#include <torch/torch.h>
+
+struct Net: torch::nn::Module {
+    static const int_fast32_t width = 6;
+    static const int_fast32_t height = 6;
+    Net();
+    std::pair<torch::Tensor, torch::Tensor> forward(torch::Tensor x);
+    // 输入特征
+    // 我方棋局的形态 6 * 6
+    // 对方局面的形态 6 * 6
+    // 上我我方的局面 6 * 6
+    // 上轮对方的局面 6 * 6
+    // 我方是否先手(1的时候，我方先手，否则为0) 6 * 6
+    // 总共是 5 * 6 * 6 的局面
+
+
+    // 公共网络
+    torch::nn::Conv2d conv1{nullptr}, conv2{nullptr}, conv3{nullptr};
+
+    // 策略网络
+    torch::nn::Conv2d pol_conv1{nullptr};
+    torch::nn::Linear pol_fc1{nullptr};
+
+    // 价值网络
+    torch::nn::Conv2d val_conv1{nullptr};
+    torch::nn::Linear val_fc1{nullptr};
+    torch::nn::Linear val_fc2{nullptr};
+
+};
+
+struct PolicyValueNet {
+    PolicyValueNet();
+    ~PolicyValueNet();
+    torch::optim::Optimizer *optimizer = nullptr;
+    torch::Device device{torch::kCPU};
+    Net model;
+    std::pair<torch::Tensor, torch::Tensor> policy_value(torch::Tensor);
+    std::pair<torch::Tensor, torch::Tensor> train_step(torch::Tensor states_batch, torch::Tensor mcts_probs, torch::Tensor winner_batch);
+    void save_model(std::string model_file);
+    void load_model(std::string model_file);
+};
+#endif // POLICY_VALUE_MODEL_H
