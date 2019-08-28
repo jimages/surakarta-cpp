@@ -44,5 +44,6 @@ _deps
 *.app
 
 bin/
+build/
 *.swp
 .vscode/

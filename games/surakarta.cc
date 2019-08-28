@@ -1,5 +1,5 @@
 #include "surakarta.h"
-#include <mcts.h>
+#include "mcts.h"
 #include <vector>
 #include <utility>
 #include <iostream>
@@ -35,134 +35,250 @@ const uint_fast8_t SurakartaState::arc_map[] = {0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0,
 #define PORT  8999
 #define BUFFER 2048
 
-SurakartaState::Move fromsocket(int fd) {
-    char buffer[BUFFER];
-    auto l = recv(fd, buffer, BUFFER, 0);
-    if (l == -1) {
-        perror(strerror(errno));
-        exit(-1);
-    }
-    assert(l == 7);
-    buffer[7] = '\0';
-    std::stringstream str;
-    str << buffer;
-    SurakartaState::Move m = SurakartaState::no_move;
-    str >> m;
-    return m;
-}
+void SurakartaState::do_move(Move move, bool is_human) {
+    MV_ASSERT(move);
+    PR_ASSERT();
 
-void tosocket(int fd, SurakartaState::Move move) {
-    std::stringstream m;
-    m << move;
-    auto str = m.str();
-    if (send(fd, str.c_str(), str.length(), 0) == -1) {
-        perror(strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-}
+    // check the target position can only be held by null or enimy.
+    assert(board[move.current.second * BOARD_SIZE + move.current.first]
+            == player_chess[player_to_move]);
+    assert(board[move.target.second * BOARD_SIZE + move.target.first]
+            != player_chess[player_to_move]);
 
-void main_program()
-{
-    auto serverfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverfd == -1) {
-        perror(strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+    if (is_human) {
+        if (board[move.target.second * BOARD_SIZE + move.target.first] == ChessType::Null) {
+            // we check the available position
+            const auto &current = move.current;
+            const auto &target = move.target;
 
-    decltype(serverfd) fd;
-    struct sockaddr_in src_addr, des_addr;
+            if (!(current.first >= 0 && current.second >= 0 && target.first >= 0
+                        && target.second >= 0 && current.first < 6 && current.second < 6
+                        && target.first < 6 && target.second < 6))
+                throw runtime_error("下的位置不合法");
 
-    bool self_play = false;
-    bool counter_first = false;
-    bool should_move = false;
-    bool net_competition = true;
+            if ((abs(current.first - target.first) > 1 )
+                    || ( abs(current.second - target.second) > 1))
+                throw runtime_error("下的位置不合法");
 
+            board[target.second * BOARD_SIZE + target.first] = player_chess[player_to_move];
+            board[current.second * BOARD_SIZE + current.first] = ChessType::Null;
 
-    if (self_play || !counter_first) {
-        should_move = true;
-    }
+        } else if (board[move.target.second * BOARD_SIZE + move.target.first]
+                == player_chess[3 - player_to_move]) {
+            // check can we eat the certain postion
 
-    memset(&src_addr, '\0', sizeof(src_addr));
+            // check the current position
+            auto cur_pos_out = find_all(outer_loop.cbegin(), outer_loop.cend(),
+                    std::make_pair(move.current.first, move.current.second));
+            auto cur_pos_inn = find_all(inner_loop.cbegin(), inner_loop.cend(),
+                    std::make_pair(move.current.first, move.current.second));
 
-    src_addr.sin_family= AF_INET;
-    src_addr.sin_addr.s_addr = INADDR_ANY;
-    src_addr.sin_port = htons( PORT );
+            // check the target position.
+            auto tar_pos_out = find_all(outer_loop.cbegin(), outer_loop.cend(),
+                    std::make_pair(move.target.first, move.target.second));
+            auto tar_pos_inn = find_all(inner_loop.cbegin(), inner_loop.cend(),
+                    std::make_pair(move.target.first, move.target.second));
 
-    socklen_t addrlen = sizeof(src_addr);
-    if (net_competition) {
-        if (bind(serverfd, (struct sockaddr *)&src_addr, sizeof(src_addr)) < 0)
-            perror(strerror(errno));
-        if (listen(serverfd, 1) != 0)
-            perror(strerror(errno));
-        if ((fd = accept(serverfd, (struct sockaddr *)&des_addr, &addrlen)) < 0)
-            perror(strerror(errno));
-        if (counter_first)
-            send(fd, static_cast<const void *>("1"), static_cast<size_t>(1), 0);
-    }
-
-    MCTS::ComputeOptions player1_options, player2_options;
-    player1_options.max_time =  10.0;
-    player1_options.number_of_threads = 8;
-    player1_options.verbose = true;
-
-    player2_options.max_time= 30.0;
-    player2_options.number_of_threads = 4;
-	player2_options.verbose = true;
-
-	SurakartaState state;
-    state.player_to_move = 1;
-	while (state.has_moves()) {
-		cout << endl << "State: " << state << endl;
-
-		SurakartaState::Move move = SurakartaState::no_move;
-		if (should_move) {
-                move = MCTS::compute_move(state, player1_options);
-                state.do_move(move);
-                if (net_competition)
-                    tosocket(fd, move);
-		} else {
-				while (true) {
-                    if (net_competition) {
-                        move = fromsocket(fd);
-                    } else {
-                        cout << "Input your move: ";
-                        std::cin >> move;
+            for(auto cur_out: cur_pos_out) {
+                for(auto tar_out: tar_pos_out) {
+                    if (can_eat(outer_loop.cbegin(), outer_loop.cend(), cur_out, tar_out))
+                    {
+                        board[tar_out->second * BOARD_SIZE + tar_out->first] = player_chess[player_to_move];
+                        board[cur_out->second * BOARD_SIZE + cur_out->first] = ChessType::Null;
+                        goto success;
                     }
-                        try {
-                            std::cout << "counter move: " << move;
-                            state.do_move(move);
-                            break;
-                        }
-                        catch (std::exception& ) {
-                            cout << "Invalid move." << endl;
-                        }
-				}
+                }
+            }
+            for(auto cur: cur_pos_inn) {
+                for(auto tar: tar_pos_inn) {
+                    if (can_eat(inner_loop.cbegin(), inner_loop.cend(), cur, tar))
+                    {
+                        board[tar->second * BOARD_SIZE + tar->first] = player_chess[player_to_move];
+                        board[cur->second * BOARD_SIZE + cur->first] = ChessType::Null;
+                        goto success;
+                    }
+                }
+            }
+            throw runtime_error("下的位置不合法");
+        } else {
+                throw runtime_error("下的位置不合法");
         }
-        if (!self_play)
-            should_move = !should_move;
+    } else {
+        board[move.target.second * BOARD_SIZE + move.target.first] = player_chess[player_to_move];
+        board[move.current.second * BOARD_SIZE + move.current.first] = ChessType::Null;
     }
 
-    std::cout << endl << "Final state: " << state << endl;
-
-	if (state.get_result(2) == 1.0) {
-		cout << "Player 1 wins!" << endl;
-	}
-	else if (state.get_result(1) == 1.0) {
-		cout << "Player 2 wins!" << endl;
-	}
-	else {
-		cout << "Nobody wins!" << endl;
-	}
+success:
+    has_get_moves = false;
+    player_to_move = 3 - player_to_move;
     return;
 }
+void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const {
+    // now we check can we eat something.
+    bool flag = 0;
+    decltype(inner_loop)::const_iterator iters[2];
+    auto n = find_all(true, x,y, iters);
+    for (auto i = 0; i < n; ++i) {
+        auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), iters[i]);
+        if (move.is_activated) {
+            inserter = std::move(move);
+            flag |= 1;
+        }
+        move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(iters[i]) - 1);
+        if (move.is_activated)
+        {
+            inserter = std::move(move);
+            flag |= 1;
+        }
+    }
+    n = find_all(false, x,y, iters);
+    for (auto i = 0; i < n; ++i) {
+        auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), iters[i]);
+        if (move.is_activated)
+        {
+            inserter = std::move(move);
+            flag |= 1;
+        }
+        move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(iters[i]) - 1);
+        if (move.is_activated)
+        {
+            inserter = std::move(move);
+            flag |= 1;
+        }
+    }
+    if (flag) return;
 
-int main()
+    // get all valiable moves.
+    for (const auto &direc: directions) {
+        if (x + direc.first < 6 && x + direc.first >= 0 &&
+                y + direc.second < 6 && y + direc.second >= 0 &&
+                board[ BOARD_SIZE * (y + direc.second) + x + direc.first] == ChessType::Null) {
+            inserter = {1,{x,y},{x + direc.first, y + direc.second}};
+        }
+    }
+}
+void SurakartaState::print(ostream& out) const
 {
-	try {
-		main_program();
-	}
-	catch (std::runtime_error& error) {
-		std::cerr << "ERROR: " << error.what() << std::endl;
-		return 1;
-	}
+    out << endl;
+    // print the first line.
+    out << "  ";
+    for (int col = 0; col < BOARD_SIZE - 1; ++col) {
+        out << col << ' ';
+    }
+    // the last columns
+    out << BOARD_SIZE - 1 << endl;
+
+    // for the second line.
+    for (int row = 0; row < BOARD_SIZE; ++row) {
+        out << row << " ";
+        for (int col = 0; col < BOARD_SIZE - 1; ++col) {
+            out << player_markers[board[ BOARD_SIZE * row + col]] << ' ';
+        }
+        out << player_markers[board[BOARD_SIZE * row + BOARD_SIZE - 1]]<< " |" << endl;
+    }
+    out << "+";
+    for (int col = 0; col < BOARD_SIZE - 1; ++col) {
+        out << "--";
+    }
+    out << "-+" << endl;
+    out << player_markers[player_to_move] << " to move " << endl << endl;
+}
+// Get all available move.
+std::vector<SurakartaState::Move>& SurakartaState::get_moves() const
+{
+    PR_ASSERT();
+    if (has_get_moves) {
+        return moves;
+    } else {
+        // 利用局部性原理，在用的时候清除
+        moves.clear();
+        for (auto row = 0; row < BOARD_SIZE; ++row)
+            for (auto col = 0; col < BOARD_SIZE; ++col) {
+                if ( board[row * BOARD_SIZE + col] == player_chess[player_to_move]) {
+                    get_valid_move(col, row, back_inserter(moves));
+                }
+            }
+        has_get_moves = true;
+        return moves;
+    }
+}
+bool SurakartaState::can_eat(
+        const decltype(inner_loop)::const_iterator begin,
+        const decltype(inner_loop)::const_iterator end,
+        decltype(inner_loop)::const_iterator curr,
+        decltype(inner_loop)::const_iterator tart) const {
+    auto former = curr > tart? tart: curr;
+    auto latter = curr > tart? curr: tart;
+    bool flag_former = true;
+    bool flag_latter = true;
+    // check from former to later.
+    for (auto i = former + 1; i != latter; ++i) {
+        if (i == end) i = begin;
+        // if the former is begin()
+        if (i == latter) break;
+        if ((board[ i->second * BOARD_SIZE + i->first] != ChessType::Null) && *i != *curr && *i != *tart) {
+            flag_former = false;
+            break;
+        }
+    }
+    if (flag_former) return true;
+    else {
+        // check from latter to former if necessary.
+        for (auto i = latter + 1; i != former; ++i) {
+            if (i == end) i = begin;
+            // if the former is begin()
+            if (i == former) break;
+            if ((board[ i->second * BOARD_SIZE + i->first] != ChessType::Null) && *i != *curr && *i != *tart) {
+                flag_latter = false;
+                break;
+            }
+        }
+    }
+    return flag_former | flag_latter;
+}
+// get the winner if we have, return player[0] otherwise.
+SurakartaState::ChessType SurakartaState::get_winner() const {
+    auto begin_iter = begin(board);
+    auto end_iter = end(board);
+    for (auto i = 1; i <= 2; ++i) {
+        if (find(begin_iter, end_iter, player_chess[i]) == end_iter) {
+            return player_chess[3 - i];
+        }
+    }
+
+    // 如歌有一方没有可行动作，则判断谁的子多即可
+    auto tmp_moves = get_moves();
+    if (tmp_moves.empty()) {
+        int num[3] = {0};
+        for (auto i = 1; i <= 2; ++i) {
+            num[i] = count(begin_iter, end_iter, player_chess[i]);
+        }
+        if (num[1] > num[2])
+            return player_chess[1];
+        else
+            return player_chess[2];
+    }
+    return player_chess[0];
+}
+size_t SurakartaState::find_all(bool is_inner,  int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const {
+    const int_fast16_t *map;
+    decltype(inner_loop)::const_iterator target_iters;
+    if (is_inner) {
+        map = inner_loop_map;
+        target_iters = inner_loop.cbegin();
+    } else {
+        map = outer_loop_map;
+        target_iters = outer_loop.cbegin();
+    }
+    int_fast16_t target = map[x + y * BOARD_SIZE];
+    if (target == -1)
+        return 0;
+    else if (target > 23) {
+        iters[0] = target_iters + (target & 0x1F);
+        iters[1] = target_iters + ((target & 0x3E0) >> 5);
+        return 2;
+    } else {
+        iters[0] = target_iters + (target & 0x1F);
+        return 1;
+    }
 }
