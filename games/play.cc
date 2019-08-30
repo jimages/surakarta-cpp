@@ -12,6 +12,9 @@
 #include <cstdlib>
 #include <cassert>
 
+#define PORT  8999
+#define BUFFER 2048
+
 SurakartaState::Move fromsocket(int fd) {
     char buffer[BUFFER];
     auto l = recv(fd, buffer, BUFFER, 0);

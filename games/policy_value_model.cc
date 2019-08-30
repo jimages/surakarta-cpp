@@ -4,16 +4,16 @@
 #include <iostream>
 
 Net::Net() {
-    conv1 = register_module("conv1", torch::nn::Conv2d(5, 32, 3, 1));
-    conv2 = register_module("conv2", torch::nn::Conv2d(32, 64, 3, 1));
-    conv3 = register_module("conv3", torch::nn::Conv2d(64, 128, 3, 1));
+    conv1 = register_module("conv1", torch::nn::Conv2d(9, 45, 3, 1));
+    conv2 = register_module("conv2", torch::nn::Conv2d(45, 90, 3, 1));
+    conv3 = register_module("conv3", torch::nn::Conv2d(90, 180, 3, 1));
 
     // 策略网络
-    pol_conv1 = register_module("pol_conv1", torch::nn::Conv2d(128, 5, 1));
-    pol_fc1 = register_module("pol_fc1", torch::nn::Linear(5 * width * height, width * height * width * height));
+    pol_conv1 = register_module("pol_conv1", torch::nn::Conv2d(180, 4, 1));
+    pol_fc1 = register_module("pol_fc1", torch::nn::Linear(4 * width * height, width * height * width * height));
 
     // 价值网络
-    val_conv1 = register_module("val_conv1", torch::nn::Conv2d(128, 2, 1));
+    val_conv1 = register_module("val_conv1", torch::nn::Conv2d(180, 2, 1));
     val_fc1 = register_module("val_fc1", torch::nn::Linear(2 * width * height, 64));
     val_fc2 = register_module("val_fc2", torch::nn::Linear(64, 1));
 }
@@ -27,7 +27,7 @@ std::pair<torch::Tensor, torch::Tensor> Net::forward(torch::Tensor x) {
 
     // 策略网络
     auto x_pol = torch::relu(pol_conv1->forward(x));
-    x_pol = x_pol.view({-1, 5 * width * height});
+    x_pol = x_pol.view({-1, 4 * width * height});
     x_pol = torch::log_softmax(pol_fc1->forward(x_pol), 1);
 
     // 价值网络

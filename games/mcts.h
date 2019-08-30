@@ -2,65 +2,26 @@
 #define MCTS_HEADER_PETTER
 #include <cassert>
 //
+// Zachary Wang 2019
+// jiamges123@gmail.com
+//
+// AlphaZero for surakarta.
+//
+// Base on Petter's work.
+//
 // Petter Strandmark 2013
 // petter.strandmark@gmail.com
-//
-// Monte Carlo Tree Search for finite games.
 //
 // Originally based on Python code at
 // http://mcts.ai/code/python.html
 //
-// Uses the "root parallelization" technique [1].
-//
-// This game engine can play any game defined by a state like this:
-/*
 
-class GameState
-{
-public:
-	typedef int Move;
-	static const Move no_move = ...
-
-	void do_move(Move move);
-	template<typename RandomEngine>
-	void do_random_move(*engine);
-	bool has_moves() const;
-	std::vector<Move> get_moves() const;
-
-	// Returns a value in {0, 0.5, 1}.
-	// This should not be an evaluation function, because it will only be
-	// called for finished games. Return 0.5 to indicate a draw.
-	double get_result(int current_player_to_move) const;
-
-	int player_to_move;
-
-	// ...
-private:
-	// ...
+namespace MCTS {
+struct MCTSOptions {
+    size_t max_simulation = 800;
+    bool verbose = false;
 };
 
-*/
-//
-// See the examples for more details. Given a suitable State, the
-// following function (tries to) compute the best move for the
-// player to move.
-//
-
-namespace MCTS
-{
-struct ComputeOptions
-{
-	int number_of_threads = 8;
-	int max_iterations = -1.0;
-	double max_time = -1.0; // default is no time limit
-	bool verbose = false;
-
-};
-
-template<typename State>
-typename State::Move compute_move(const State root_state,
-                                  const ComputeOptions &options = ComputeOptions());
-}
 //
 //
 // [1] Chaslot, G. M. B., Winands, M. H., & van Den Herik, H. J. (2008).
@@ -80,364 +41,171 @@ typename State::Move compute_move(const State root_state,
 #include <sstream>
 #include <string>
 #include <thread>
+#include <torch/torch.h>
 #include <vector>
+
+#include "policy_value_model.h"
 
 #ifdef USE_OPENMP
 #include <omp.h>
 #endif
 
-namespace MCTS
-{
-using std::cerr;
-using std::endl;
-using std::vector;
-using std::size_t;
+namespace MCTS {
+    using std::cerr;
+    using std::endl;
+    using std::size_t;
+    using std::vector;
 
+    //
+    // This class is used to build the game tree. The root is created by the users and
+    // the rest of the tree is created by add_node.
+    //
+    template <typename State>
+    class Node {
+    public:
+        using Move = typename State::Move;
 
-//
-// This class is used to build the game tree. The root is created by the users and
-// the rest of the tree is created by add_node.
-//
-template<typename State>
-class Node
-{
-public:
-	typedef typename State::Move Move;
+        std::map<typename State::Move, Node*> children;
+        const Move move;
+        const int player_to_move;
 
-	explicit Node(const State& state);
-	~Node();
+        int visits = 0;
+        float Q = 0.0;
+        float U = 0.0;
+        float P = 0.0;
 
-	bool has_untried_moves() const;
-	template<typename RandomEngine>
-	Move get_untried_move(RandomEngine* engine) const;
-	Node* best_child() const;
+        Node(const State& state, float prior = 0.0)
+            : move(State::no_move)
+            , parent(nullptr)
+            , player_to_move(state.player_to_move)
+            , P(prior)
+        {
+        }
 
-	bool has_children() const
-	{
-		return ! children.empty();
-	}
+        Node(const Node&) = delete;
 
-	Node* select_child_UCT() const;
-	Node* add_child(const Move& move, const State& state);
-	void update(double result);
+        ~Node()
+        {
+            for (auto child : children) {
+                delete child;
+            }
+        }
 
-	std::string to_string() const;
-	std::string tree_to_string(int max_depth = 1000000, int indent = 0) const;
+        Node<State>* best_child() const
+        {
+            assert(!children.empty());
 
-	const Move move;
-	Node* const parent;
-	const int player_to_move;
+            return *std::max_element(children.begin(), children.end(),
+                [](Node* a, Node* b) { return a->visits < b->visits; });
+            ;
+        }
 
-	//std::atomic<double> wins;
-	//std::atomic<int> visits;
-	double wins;
-	int visits;
+        Node<State>* select() const
+        {
+            assert(!children.empty());
+            for (auto child : children) {
+                child->UCT_score = double(child->wins) / double(child->visits) + std::sqrt(2.0 * std::log(double(this->visits)) / child->visits);
+            }
 
-	std::vector<Move> moves;
-	std::vector<Node*> children;
+            return *std::max_element(children.begin(), children.end(),
+                [](Node* a, Node* b) { return a->UCT_score < b->UCT_score; });
+        }
+        Node<State>* add_child(int player2move, const Move& move, float prior)
+        {
+            auto node = new Node(player2move, move, this, prior);
+            children[move] = node;
+            assert(!children.empty());
 
-private:
-	Node(const State& state, const Move& move, Node* parent);
+            return node;
+        }
 
-	std::string indent_string(int indent) const;
+        void update(double result)
+        {
+            visits++;
 
-	Node(const Node&);
-	Node& operator = (const Node&);
+            //double my_wins = wins.load();
+            //while ( ! wins.compare_exchange_strong(my_wins, my_wins + result));
+        }
 
-	double UCT_score;
-};
+        bool is_leaf() const
+        {
+            return !children.empty();
+        }
 
+        std::string to_string() const
+        {
+            std::stringstream sout;
+            sout << "["
+                 << "P" << 3 - player_to_move << " "
+                 << "M:" << move << " ";
+            return sout.str();
+        }
 
-/////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////
+        std::string tree_to_string(int max_depth = 1000000, int indent = 0) const
+        {
+            if (indent >= max_depth) {
+                return "";
+            }
 
+            std::string s = indent_string(indent) + to_string();
+            for (auto child : children) {
+                s += child->tree_to_string(max_depth, indent + 1);
+            }
+            return s;
+        }
 
-template<typename State>
-Node<State>::Node(const State& state) :
-	move(State::no_move),
-	parent(nullptr),
-	player_to_move(state.player_to_move),
-	wins(0),
-	visits(0),
-	moves(state.get_moves()),
-	UCT_score(0)
-{ }
+    private:
+        Node* const parent;
 
-template<typename State>
-Node<State>::Node(const State& state, const Move& move_, Node* parent_) :
-	move(move_),
-	parent(parent_),
-	player_to_move(state.player_to_move),
-	wins(0),
-	visits(0),
-	moves(state.get_moves()),
-	UCT_score(0)
-{ }
+        Node(int player_to_move, const Move& move_, Node* parent_, float prior)
+            : move(move_)
+            , parent(parent_)
+            , player_to_move(player_to_move)
+            , visits(0)
+            , Q(0)
+            , U(0)
+            , P(prior)
+        {
+        }
 
-template<typename State>
-Node<State>::~Node()
-{
-	for (auto child: children) {
-		delete child;
-	}
-}
+        std::string indent_string(int indent) const
+        {
+            std::string s = "";
+            for (int i = 1; i <= indent; ++i) {
+                s += "| ";
+            }
+            return s;
+        }
+    };
 
-template<typename State>
-bool Node<State>::has_untried_moves() const
-{
-	return ! moves.empty();
-}
+    /////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////
 
-template<typename State>
-template<typename RandomEngine>
-typename State::Move Node<State>::get_untried_move(RandomEngine* engine) const
-{
-	assert( ! moves.empty());
-	std::uniform_int_distribution<std::size_t> moves_distribution(0, moves.size() - 1);
-	return moves[moves_distribution(*engine)];
-}
+    template <typename State>
+    void evaluate(
+        Node<State>* node, const State& state, const PolicyValueNet& network)
+    {
+        assert(node->is_leaf());
+        assert(state.has_moves());
 
-template<typename State>
-Node<State>* Node<State>::best_child() const
-{
-	assert(moves.empty());
-	assert( ! children.empty() );
+        torch::Tensor policy, value;
+        std::tie(policy, value) = network.policy_value(state.tensor());
 
-	return *std::max_element(children.begin(), children.end(),
-		[](Node* a, Node* b) { return a->visits < b->visits; });;
-}
+        for (auto& move : state.get_moves()) {
+            // First we get the location from policy.
+            node->add_child(3 - state.player_to_move, move, policy[move2index(move)]);
+        }
+    }
 
-template<typename State>
-Node<State>* Node<State>::select_child_UCT() const
-{
-	assert( ! children.empty() );
-	for (auto child: children) {
-		child->UCT_score = double(child->wins) / double(child->visits) +
-			std::sqrt(2.0 * std::log(double(this->visits)) / child->visits);
-	}
-
-	return *std::max_element(children.begin(), children.end(),
-		[](Node* a, Node* b) { return a->UCT_score < b->UCT_score; });
-}
-
-template<typename State>
-Node<State>* Node<State>::add_child(const Move& move, const State& state)
-{
-	auto node = new Node(state, move, this);
-	children.push_back(node);
-	assert(!children.empty());
-
-	auto itr = moves.begin();
-	for (; itr != moves.end() && *itr != move; ++itr);
-	assert(itr != moves.end());
-	moves.erase(itr);
-	return node;
-}
-
-template<typename State>
-void Node<State>::update(double result)
-{
-	visits++;
-
-	wins += result;
-	//double my_wins = wins.load();
-	//while ( ! wins.compare_exchange_strong(my_wins, my_wins + result));
-}
-
-template<typename State>
-std::string Node<State>::to_string() const
-{
-	std::stringstream sout;
-	sout << "["
-	     << "P" << 3 - player_to_move << " "
-	     << "M:" << move << " "
-	     << "W/V: " << wins << "/" << visits << " "
-	     << "U: " << moves.size() << "]\n";
-	return sout.str();
-}
-
-template<typename State>
-std::string Node<State>::tree_to_string(int max_depth, int indent) const
-{
-	if (indent >= max_depth) {
-		return "";
-	}
-
-	std::string s = indent_string(indent) + to_string();
-	for (auto child: children) {
-		s += child->tree_to_string(max_depth, indent + 1);
-	}
-	return s;
-}
-
-template<typename State>
-std::string Node<State>::indent_string(int indent) const
-{
-	std::string s = "";
-	for (int i = 1; i <= indent; ++i) {
-		s += "| ";
-	}
-	return s;
-}
-
-/////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////
-
-
-template<typename State>
-std::unique_ptr<Node<State>>  compute_tree(const State root_state,
-                                           const ComputeOptions &options,
-                                           std::mt19937_64::result_type initial_seed)
-{
-	std::mt19937_64 random_engine(initial_seed);
-
-	assert(options.max_iterations >= 0 || options.max_time >= 0);
-	// Will support more players later.
-	assert(root_state.player_to_move == 1 || root_state.player_to_move == 2);
-	auto root = std::unique_ptr<Node<State>>(new Node<State>(root_state));
-
-	double start_time = ::omp_get_wtime();
-	double print_time = start_time;
-
-	for (int iter = 1; iter <= options.max_iterations || options.max_iterations < 0; ++iter) {
-		auto node = root.get();
-		State state = root_state;
-
-		// Select a path through the tree to a leaf node.
-		while (!node->has_untried_moves() && node->has_children()) {
-			node = node->select_child_UCT();
-			state.do_move(node->move);
-		}
-
-		// If we are not already at the final state, expand the
-		// tree with a new node and move there.
-		if (node->has_untried_moves()) {
-			auto move = node->get_untried_move(&random_engine);
-			state.do_move(move);
-			node = node->add_child(move, state);
-		}
-
-		// We now play randomly until the game ends.
-		while (state.has_moves()) {
-			state.do_random_move(&random_engine);
-		}
-
-		// We have now reached a final state. Backpropagate the result
-		// up the tree to the root node.
-		while (node != nullptr) {
-			node->update(state.get_result(node->player_to_move));
-			node = node->parent;
-		}
-
-		if (options.verbose || options.max_time >= 0) {
-			double time = ::omp_get_wtime();
-			if (options.verbose && (time - print_time >= 1.0 || iter == options.max_iterations)) {
-				std::cerr << iter << " games played (" << double(iter) / (time - start_time) << " / second)." << endl;
-				print_time = time;
-			}
-
-			if (time - start_time >= options.max_time) {
-				break;
-			}
-		}
-	}
-
-	return root;
-}
-
-template<typename State>
-typename State::Move compute_move(const State root_state,
-                                  const ComputeOptions &options)
-{
-	using namespace std;
-
-	// Will support more players later.
-	assert(root_state.player_to_move == 1 || root_state.player_to_move == 2);
-
-	auto moves = root_state.get_moves();
-	assert(moves.size() > 0);
-	if (moves.size() == 1) {
-		return moves[0];
-	}
-
-	double start_time = ::omp_get_wtime();
-
-	// Start all jobs to compute trees.
-	vector<future<unique_ptr<Node<State>>>> root_futures;
-	ComputeOptions job_options = options;
-	job_options.verbose = false;
-	for (int t = 0; t < options.number_of_threads; ++t) {
-		auto func = [t, &root_state, &job_options] () -> std::unique_ptr<Node<State>>
-		{
-			return compute_tree(root_state, job_options, 1012411 * t + 12515);
-		}; // lambda 函数
-
-		root_futures.push_back(std::async(std::launch::async, func));
-	}
-
-	// 将多个对局的结果合并成一个新的结果.
-	vector<unique_ptr<Node<State>>> roots;
-	for (int t = 0; t < options.number_of_threads; ++t) {
-		roots.push_back(std::move(root_futures[t].get()));
-	}
-
-	// Merge the children of all root nodes.
-	map<typename State::Move, int> visits;
-	map<typename State::Move, double> wins;
-	long long games_played = 0;
-	for (int t = 0; t < options.number_of_threads; ++t) {
-		auto root = roots[t].get();
-		games_played += root->visits;
-		for (auto child = root->children.cbegin(); child != root->children.cend(); ++child) {
-			visits[(*child)->move] += (*child)->visits;
-			wins[(*child)->move]   += (*child)->wins;
-		}
-	}
-
-	// Find the node with the highest score.
-	double best_score = -1;
-	typename State::Move best_move = typename State::Move();
-	for (auto itr: visits) {
-		auto move = itr.first;
-		double v = itr.second;
-		double w = wins[move];
-		// Expected success rate assuming a uniform prior (Beta(1, 1)).
-		// https://en.wikipedia.org/wiki/Beta_distribution
-		double expected_success_rate = (w + 1) / (v + 2);
-		if (expected_success_rate > best_score) {
-			best_move = move;
-			best_score = expected_success_rate;
-		}
-
-		if (options.verbose) {
-			cerr << "Move: " << itr.first
-			     << " (" << setw(2) << right << int(100.0 * v / double(games_played) + 0.5) << "% visits)"
-			     << " (" << setw(2) << right << int(100.0 * w / v + 0.5)    << "% wins)" << endl;
-		}
-	}
-
-	if (options.verbose) {
-		auto best_wins = wins[best_move];
-		auto best_visits = visits[best_move];
-		cerr << "----" << endl;
-		cerr << "Best: " << best_move
-		     << " (" << 100.0 * best_visits / double(games_played) << "% visits)"
-		     << " (" << 100.0 * best_wins / best_visits << "% wins)" << endl;
-	}
-
-	if (options.verbose) {
-		double time = ::omp_get_wtime();
-		std::cerr << games_played << " games played in " << double(time - start_time) << " s. "
-		          << "(" << double(games_played) / (time - start_time) << " / second, "
-		          << options.number_of_threads << " parallel jobs)." << endl;
-	}
-
-	return best_move;
-}
-
-/////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////
-
+    template <typename State>
+    void add_exploration_noise(Node<typename State>* root)
+    {
+        assert(!root.children.empty());
+        std::gamma_distribution<float> gamma(0.3);
+        for (auto i = root->children.begin(); i != root->children.end(); ++i) {
+            (*i)->P = (*i)->P * 0.75 + gamma() * 0.25;
+        }
+    }
 }
 
 #endif
