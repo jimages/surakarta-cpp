@@ -13,6 +13,7 @@
 #include <vector>
 
 const char SurakartaState::player_markers[] = { '*', 'R', 'B' };
+const SurakartaState::Move SurakartaState::no_move = { 0, { 0, 0 }, { 0, 0 } };
 const SurakartaState::ChessType SurakartaState::player_chess[] = { SurakartaState::ChessType::Null, SurakartaState::ChessType::Red, SurakartaState::ChessType::Black };
 const std::vector<std::pair<int, int>> SurakartaState::outer_loop = { { 1, 0 }, { 0, 1 }, { 1, 1 },
     { 2, 1 }, { 3, 1 }, { 4, 1 }, { 5, 1 }, { 4, 0 }, { 4, 1 }, { 4, 2 }, { 4, 3 }, { 4, 4 }, { 4, 5 },

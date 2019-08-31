@@ -1,12 +1,12 @@
 #ifndef POLICY_VALUE_MODEL_H
 #define POLICY_VALUE_MODEL_H
-#include <utility>
 #include <torch/torch.h>
+#include <utility>
 
-struct Net: torch::nn::Module {
+struct NetImpl : torch::nn::Module {
     static const int_fast32_t width = 6;
     static const int_fast32_t height = 6;
-    Net();
+    NetImpl();
     std::pair<torch::Tensor, torch::Tensor> forward(torch::Tensor x);
 
     /*
@@ -24,26 +24,26 @@ struct Net: torch::nn::Module {
      * 总共是 9 * 6 * 6 的局面
      */
 
-
     // 公共网络
-    torch::nn::Conv2d conv1{nullptr}, conv2{nullptr}, conv3{nullptr};
+    torch::nn::Conv2d conv1 { nullptr }, conv2 { nullptr }, conv3 { nullptr };
 
     // 策略网络
-    torch::nn::Conv2d pol_conv1{nullptr};
-    torch::nn::Linear pol_fc1{nullptr};
+    torch::nn::Conv2d pol_conv1 { nullptr };
+    torch::nn::Linear pol_fc1 { nullptr };
 
     // 价值网络
-    torch::nn::Conv2d val_conv1{nullptr};
-    torch::nn::Linear val_fc1{nullptr};
-    torch::nn::Linear val_fc2{nullptr};
-
+    torch::nn::Conv2d val_conv1 { nullptr };
+    torch::nn::Linear val_fc1 { nullptr };
+    torch::nn::Linear val_fc2 { nullptr };
 };
+
+TORCH_MODULE(Net);
 
 struct PolicyValueNet {
     PolicyValueNet();
     ~PolicyValueNet();
-    torch::optim::Optimizer *optimizer = nullptr;
-    torch::Device device{torch::kCPU};
+    torch::optim::Optimizer* optimizer = nullptr;
+    torch::Device device { torch::kCPU };
     Net model;
     std::pair<torch::Tensor, torch::Tensor> policy_value(torch::Tensor);
     std::pair<torch::Tensor, torch::Tensor> train_step(torch::Tensor states_batch, torch::Tensor mcts_probs, torch::Tensor winner_batch);

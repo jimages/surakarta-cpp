@@ -60,7 +60,7 @@ public:
     static const torch::Tensor outter_loop_mask;
     static const torch::Tensor inner_loop_mask;
 
-    static constexpr Move no_move = { 0, { 0, 0 }, { 0, 0 } };
+    static const Move no_move;
 
     static const char player_markers[3];
     static const ChessType player_chess[3];
@@ -104,15 +104,16 @@ public:
 
     void print(ostream& out) const;
     std::vector<Move>& get_moves() const;
+    int get_winner() const;
 
 private:
     ChessType board[BOARD_SIZE * BOARD_SIZE];
     Move last_move = no_move;
 
-    const vector<pair<int, int>> directions;
+    static const vector<pair<int, int>> directions;
     mutable bool has_get_moves = false;
+    mutable std::vector<Move> moves;
 
-    int get_winner() const;
     size_t find_all(bool is_inner, int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const;
     bool can_eat(
         const decltype(inner_loop)::const_iterator begin,

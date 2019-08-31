@@ -22,14 +22,16 @@
 
 #define GAME 5000
 #define GAME_LIMIT 200
-#define SAMPLE_SIZE 100;
+#define SAMPLE_SIZE 100
+
+using MCTS::Node;
+using MCTS::run_mcts;
 
 torch::Tensor get_statistc(Node<SurakartaState>* node)
 {
     torch::Tensor prob = torch::zeros({ SURAKARTA_ACTION }, torch::kFloat);
-    float total = std::accumulate((node->children).begin(), (node->children).end(),
-        [](const std::pair<SurakartaState::Move, Node<SurakartaState>*>& l,
-            const std::pair<SurakartaState::Move, Node<SurakartaState*>>& r) { return l.second->visits + r.second->visits; });
+    float total = std::accumulate((node->children).begin(), (node->children).end(), 0.0,
+        [](const double l, const std::pair<SurakartaState::Move, Node<SurakartaState>*>& r) { return l + r.second->visits; });
     for (auto i = (node->children).begin(); i != (node->children).end(); ++i) {
         prob[move2index(i->first)] = i->second->visits / total;
     }
@@ -43,14 +45,14 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> sample(const torch::Tens
     std::mt19937 g(rd());
 
     // generate the sample indexs.
-    auto size = board.size()[0];
-    array<size_t> order(size);
-    array<size_t> order_sampled(SAMPLE_SIZE);
+    auto size = board.size(0);
+    std::vector<size_t> order(size);
+    std::array<size_t, SAMPLE_SIZE> order_sampled;
 
     std::iota(order.begin(), order.end(), 0);
-    std::random_shuffle(order.begin(), order.end(), g);
+    std::shuffle(order.begin(), order.end(), g);
 
-    std::copy_n(order.begin(), order_sampled.begin(), SAMPLE_SIZE);
+    std::copy_n(order.begin(), SAMPLE_SIZE, order_sampled.begin());
 
     // 获得了取样数据的index序列
     torch::Tensor idx = torch::from_blob(order_sampled.data(), { SAMPLE_SIZE });
@@ -87,14 +89,14 @@ int main()
         SurakartaState game;
         while (game.get_winner() == 0 && count < GAME_LIMIT) {
             Node<SurakartaState> root(game.player_to_move);
-            auto move = MCTS::run_mcts(root, game, network, true);
+            auto move = run_mcts(&root, game, network, true);
             b = at::cat({ b, game.tensor().unsqueeze(0) });
             p = at::cat({ p, get_statistc(&root).unsqueeze(0) });
             game.do_move(move);
         }
         int winner = game.get_winner();
         // play 1 or 2;
-        int size = b.size()[0];
+        int size = b.size(0);
         auto v = torch::zeros({ size }, torch::kFloat);
         for (int i = 0; i < size; ++i) {
             v[i] = (i + 1) % 2 == winner ? 1.0f : 0.0f;
@@ -105,7 +107,7 @@ int main()
         mcts = torch::cat({ mcts, p });
         value = torch::cat({ value, v });
 
-        if (board.size()[0] > 100) {
+        if (board.size(0) > 100) {
             torch::Tensor b, p, v;
             std::tie(b, p, v) = sample(board, mcts, value);
 
