@@ -253,13 +253,13 @@ bool SurakartaState::can_eat(
     return flag_former | flag_latter;
 }
 // get the winner if we have, return player[0] otherwise.
-SurakartaState::ChessType SurakartaState::get_winner() const
+int SurakartaState::get_winner() const
 {
     auto begin_iter = begin(board);
     auto end_iter = end(board);
     for (auto i = 1; i <= 2; ++i) {
         if (find(begin_iter, end_iter, player_chess[i]) == end_iter) {
-            return player_chess[3 - i];
+            return 3 - i;
         }
     }
 
@@ -271,11 +271,12 @@ SurakartaState::ChessType SurakartaState::get_winner() const
             num[i] = count(begin_iter, end_iter, player_chess[i]);
         }
         if (num[1] > num[2])
-            return player_chess[1];
+            return 1;
         else
-            return player_chess[2];
+            return 2;
     }
-    return player_chess[0];
+    // 0 means the game is not terminated.
+    return 0;
 }
 size_t SurakartaState::find_all(bool is_inner, int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const
 {

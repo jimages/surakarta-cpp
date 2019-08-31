@@ -1,9 +1,10 @@
 #include "policy_value_model.h"
+#include <iostream>
 #include <torch/torch.h>
 #include <utility>
-#include <iostream>
 
-Net::Net() {
+Net::Net()
+{
     conv1 = register_module("conv1", torch::nn::Conv2d(9, 45, 3, 1));
     conv2 = register_module("conv2", torch::nn::Conv2d(45, 90, 3, 1));
     conv3 = register_module("conv3", torch::nn::Conv2d(90, 180, 3, 1));
@@ -18,8 +19,8 @@ Net::Net() {
     val_fc2 = register_module("val_fc2", torch::nn::Linear(64, 1));
 }
 
-
-std::pair<torch::Tensor, torch::Tensor> Net::forward(torch::Tensor x) {
+std::pair<torch::Tensor, torch::Tensor> Net::forward(torch::Tensor x)
+{
     // 公共的结构
     x = torch::relu(conv1->forward(x));
     x = torch::relu(conv2->forward(x));
@@ -27,19 +28,20 @@ std::pair<torch::Tensor, torch::Tensor> Net::forward(torch::Tensor x) {
 
     // 策略网络
     auto x_pol = torch::relu(pol_conv1->forward(x));
-    x_pol = x_pol.view({-1, 4 * width * height});
+    x_pol = x_pol.view({ -1, 4 * width * height });
     x_pol = torch::log_softmax(pol_fc1->forward(x_pol), 1);
 
     // 价值网络
     auto x_val = torch::relu(val_conv1->forward(x));
-    x_val = torch::relu(val_fc1->forward(x_val.view({-1, 2 * width * height})));
+    x_val = torch::relu(val_fc1->forward(x_val.view({ -1, 2 * width * height })));
     x_val = torch::relu(val_fc2->forward(x_val));
     x_val = torch::tanh(x_val);
 
-    return {x_pol, x_val};
+    return { x_pol, x_val };
 }
 
-PolicyValueNet::PolicyValueNet(){
+PolicyValueNet::PolicyValueNet()
+{
     // 宇宙的答案
     torch::DeviceType device_type;
     torch::manual_seed(42);
@@ -59,14 +61,16 @@ PolicyValueNet::PolicyValueNet(){
     optimizer = new torch::optim::Adam(model.parameters(), torch::optim::AdamOptions(1e-3).weight_decay(1e-4));
 }
 
-PolicyValueNet::~PolicyValueNet() {
+PolicyValueNet::~PolicyValueNet()
+{
     delete optimizer;
 }
 
 /*
  * 获得输入一个batch的棋局batsh，获得policy和value
  */
-std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::policy_value(torch::Tensor states) {
+std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::policy_value(torch::Tensor states)
+{
     torch::TensorOptions options;
     options = options.device(device).dtype(torch::kFloat);
     states.to(options);
@@ -82,7 +86,8 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::policy_value(torch::Tens
 /*
  * 进行一次step训练
  */
-std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor states_batch, torch::Tensor mcts_probs, torch::Tensor winner_batch) {
+std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor states_batch, torch::Tensor mcts_probs, torch::Tensor winner_batch)
+{
     using namespace torch;
     TensorOptions option;
     option = option.device(device);
@@ -98,7 +103,7 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
     torch::Tensor log_act_prob, value;
     std::tie(log_act_prob, value) = model.forward(states_batch);
 
-    auto value_loss = mse_loss(value.view({-1}), winner_batch);
+    auto value_loss = mse_loss(value.view({ -1 }), winner_batch);
     auto prob_loss = -mean(sum(mcts_probs * log_act_prob), kFloat);
     auto loss = value_loss + prob_loss;
 
@@ -110,10 +115,12 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
     return std::make_pair(loss, entropy);
 }
 
-void PolicyValueNet::save_model(std::string model_file) {
+void PolicyValueNet::save_model(std::string model_file)
+{
     torch::save(model, model_file);
 }
 
-void PolicyValueNet::load_model(std::string model_file) {
+void PolicyValueNet::load_model(std::string model_file)
+{
     torch::load(model, model_file);
 }

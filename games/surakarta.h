@@ -31,12 +31,13 @@ using std::vector;
 #include "mcts.h"
 
 #define BOARD_SIZE 6
+#define SURAKARTA_ACTION 1296
+
 #define MV_ASSERT(move)                                                    \
     assert((move).is_activated);                                           \
     assert((move).is_activated);                                           \
     assert((move).current.first >= 0 && move.current.second < BOARD_SIZE); \
     assert((move).target.first >= 0 && move.target.second < BOARD_SIZE);
-
 #define PR_ASSERT() assert(player_to_move == 1 || player_to_move == 2)
 
 class SurakartaState {
@@ -79,6 +80,7 @@ public:
             }
         }
     }
+    SurakartaState(const SurakartaState&) = default;
 
     void do_move(Move move, bool is_human = false);
 
@@ -92,7 +94,7 @@ public:
     // Get the result of the match.
     double get_result(int current_player_to_move) const
     {
-        assert(get_winner() != ChessType::Null);
+        assert(get_winner() != 0);
         auto winner = get_winner();
         if (winner == player_chess[current_player_to_move])
             return 0.0;
@@ -110,7 +112,7 @@ private:
     const vector<pair<int, int>> directions;
     mutable bool has_get_moves = false;
 
-    ChessType get_winner() const;
+    int get_winner() const;
     size_t find_all(bool is_inner, int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const;
     bool can_eat(
         const decltype(inner_loop)::const_iterator begin,

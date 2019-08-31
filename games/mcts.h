@@ -5,9 +5,9 @@
 // Zachary Wang 2019
 // jiamges123@gmail.com
 //
-// AlphaZero for surakarta.
+// AlphaZero[1] for surakarta.
 //
-// Base on Petter's work.
+// Base on Petter's work[2].
 //
 // Petter Strandmark 2013
 // petter.strandmark@gmail.com
@@ -17,19 +17,18 @@
 //
 
 namespace MCTS {
-struct MCTSOptions {
-    size_t max_simulation = 800;
-    bool verbose = false;
-};
-
 //
 //
-// [1] Chaslot, G. M. B., Winands, M. H., & van Den Herik, H. J. (2008).
-//     Parallel monte-carlo tree search. In Computers and Games (pp.
-//     60-71). Springer Berlin Heidelberg.
+// [1] Silver, D., Hubert, T., Schrittwieser, J., Antonoglou, I., Lai, M., Guez, A., … Hassabis, D. (2018).
+//     A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play.
+//     Science, 362(6419), 1140–1144. https://doi.org/10.1126/science.aar6404u
+//
+// [2] Prtter Strandmark 2013
+//     https://github.com/PetterS/monte-carlo-tree-search
 //
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <future>
 #include <iomanip>
@@ -37,10 +36,8 @@ struct MCTSOptions {
 #include <map>
 #include <memory>
 #include <random>
-#include <set>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <torch/torch.h>
 #include <vector>
 
@@ -49,6 +46,10 @@ struct MCTSOptions {
 #ifdef USE_OPENMP
 #include <omp.h>
 #endif
+
+#define PB_C_BASE 19652f
+#define PB_C_INIT 1.25f
+#define SIMULATION 800
 
 namespace MCTS {
     using std::cerr;
@@ -65,19 +66,19 @@ namespace MCTS {
     public:
         using Move = typename State::Move;
 
-        std::map<typename State::Move, Node*> children;
+        std::map<typename State::Move, Node<typename State>*> children;
         const Move move;
         const int player_to_move;
+        Node* const parent;
 
         int visits = 0;
-        float Q = 0.0;
-        float U = 0.0;
+        float value_sum = 0.0;
         float P = 0.0;
 
-        Node(const State& state, float prior = 0.0)
+        Node(int to_move, float prior = 0.0)
             : move(State::no_move)
             , parent(nullptr)
-            , player_to_move(state.player_to_move)
+            , player_to_move(to_move)
             , P(prior)
         {
         }
@@ -86,30 +87,32 @@ namespace MCTS {
 
         ~Node()
         {
-            for (auto child : children) {
+            for (auto& child : children) {
                 delete child;
             }
         }
 
-        Node<State>* best_child() const
+        std::pair<typename State::Move, Node<typename State>> best_child() const
         {
             assert(!children.empty());
-
             return *std::max_element(children.begin(), children.end(),
-                [](Node* a, Node* b) { return a->visits < b->visits; });
-            ;
+                [](const std::pair<typename State::Move, Node<typename State>*>& a,
+                    const std::pair<typename State::Move, Node<typename State>*>& b) { return a->second->ucb_score() < b->second->ucb_score(); });
         }
 
-        Node<State>* select() const
+        std::pair<typename State::Move, Node<typename State>> best_action() const
         {
             assert(!children.empty());
-            for (auto child : children) {
-                child->UCT_score = double(child->wins) / double(child->visits) + std::sqrt(2.0 * std::log(double(this->visits)) / child->visits);
-            }
-
             return *std::max_element(children.begin(), children.end(),
-                [](Node* a, Node* b) { return a->UCT_score < b->UCT_score; });
+                [](const std::pair<typename State::Move, Node<typename State>*>& a,
+                    const std::pair<typename State::Move, Node<typename State>*>& b) { return a->second->visits < b->second->visits; });
         }
+
+        bool expanded() const
+        {
+            return !(children.empty());
+        }
+
         Node<State>* add_child(int player2move, const Move& move, float prior)
         {
             auto node = new Node(player2move, move, this, prior);
@@ -119,44 +122,33 @@ namespace MCTS {
             return node;
         }
 
-        void update(double result)
+        float Node<State>* value() const
         {
-            visits++;
-
-            //double my_wins = wins.load();
-            //while ( ! wins.compare_exchange_strong(my_wins, my_wins + result));
+            if (visits == 0)
+                return 0;
+            return value_sum / visits;
         }
 
-        bool is_leaf() const
+        float Node<State>* ucb_score() const
         {
-            return !children.empty();
+            assert(parent != nullptr);
+
+            float pb_c = std::log((static_cast<float>(parent->visits) + PB_C_BASE + 1) / PB_C_BASE) + PB_C_INIT;
+            pb_c += std::sqrt(static_cast<float>(parent->visits) / (static_cast<float>(visits) + 1));
+
+            return pb_c * prior + value();
         }
 
-        std::string to_string() const
+        void add_exploration_noise()
         {
-            std::stringstream sout;
-            sout << "["
-                 << "P" << 3 - player_to_move << " "
-                 << "M:" << move << " ";
-            return sout.str();
-        }
-
-        std::string tree_to_string(int max_depth = 1000000, int indent = 0) const
-        {
-            if (indent >= max_depth) {
-                return "";
+            assert(!children.empty());
+            std::gamma_distribution<float> gamma(0.3);
+            for (auto i = children.begin(); i != children.end(); ++i) {
+                i->second->P = i->second->P * 0.75 + gamma() * 0.25;
             }
-
-            std::string s = indent_string(indent) + to_string();
-            for (auto child : children) {
-                s += child->tree_to_string(max_depth, indent + 1);
-            }
-            return s;
         }
 
     private:
-        Node* const parent;
-
         Node(int player_to_move, const Move& move_, Node* parent_, float prior)
             : move(move_)
             , parent(parent_)
@@ -167,22 +159,13 @@ namespace MCTS {
             , P(prior)
         {
         }
-
-        std::string indent_string(int indent) const
-        {
-            std::string s = "";
-            for (int i = 1; i <= indent; ++i) {
-                s += "| ";
-            }
-            return s;
-        }
     };
 
     /////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////
 
     template <typename State>
-    void evaluate(
+    float evaluate(
         Node<State>* node, const State& state, const PolicyValueNet& network)
     {
         assert(node->is_leaf());
@@ -195,17 +178,60 @@ namespace MCTS {
             // First we get the location from policy.
             node->add_child(3 - state.player_to_move, move, policy[move2index(move)]);
         }
+
+        return value[0]
     }
 
     template <typename State>
-    void add_exploration_noise(Node<typename State>* root)
+    void backpropagate(
+        Node<typename State>* leaf, int to_play, float value)
     {
-        assert(!root.children.empty());
-        std::gamma_distribution<float> gamma(0.3);
-        for (auto i = root->children.begin(); i != root->children.end(); ++i) {
-            (*i)->P = (*i)->P * 0.75 + gamma() * 0.25;
+        while (leaf != nullptr) {
+            leaf->value_sum += leaf->player_to_move == to_play ? value : (1.0 - value);
+            leaf->visits++;
+            leaf = leaf->parent;
         }
     }
-}
 
+    template <tyepname State>
+    void history(const Node<typename State>* leaf)
+    {
+        assert(leaf != nullptr);
+
+        std::vector<const Node<typename State>*> history;
+        history.reverse(60);
+
+        while (leaf != nullptr) {
+            history.push_back(leaf);
+            leaf = leaf.parent;
+        }
+
+        return history;
+    }
+
+    template <typename State>
+    typename State::Move run_mcts(Node<State>* root, const State& state, PolicyValueNet& network, bool is_selfplay = false)
+    {
+        assert(!root.expanded());
+        assert(root != nullptr);
+
+        evaluate(root, state, network);
+        if (is_selfplay)
+            root.add_exploration_noise();
+
+        for (int i = 0; i < SIMULATION; ++i) {
+            auto node = root;
+            auto game = state;
+
+            while (node->expanded()) {
+                typename State::Move move;
+                std::tie(move, node) = node->best_child();
+            }
+        }
+        value = evaluate(node, game, network);
+        backpropagate(game.player_to_move, leaf, value);
+
+        return root.best_action();
+    }
+}
 #endif
