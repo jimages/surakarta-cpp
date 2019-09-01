@@ -23,7 +23,7 @@
 #define GAME 50000000
 #define GAME_LIMIT 400
 #define SAMPLE_SIZE 4096
-#define GAME_DATA_LIMIT 5000000
+#define GAME_DATA_LIMIT 1000000
 
 using MCTS::Node;
 using MCTS::run_mcts;
