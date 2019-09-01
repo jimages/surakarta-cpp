@@ -22,7 +22,7 @@
 
 #define GAME 5000
 #define GAME_LIMIT 200
-#define SAMPLE_SIZE 100
+#define SAMPLE_SIZE 2048
 
 using MCTS::Node;
 using MCTS::run_mcts;
@@ -111,7 +111,7 @@ int main()
         mcts = torch::cat({ mcts, p });
         value = torch::cat({ value, v });
 
-        if (board.size(0) > 100) {
+        if (board.size(0) > SAMPLE_SIZE) {
             torch::Tensor b, p, v;
             std::tie(b, p, v) = sample(board, mcts, value);
 
