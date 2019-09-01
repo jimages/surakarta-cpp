@@ -74,7 +74,7 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::policy_value(torch::Tens
 {
     torch::TensorOptions options;
     options = options.device(device).dtype(torch::kFloat);
-    states.to(options);
+    states = states.to(options);
 
     model->eval();
 
@@ -93,9 +93,9 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
     TensorOptions option;
     option = option.device(device);
     option = option.dtype(kFloat);
-    states_batch.to(option);
-    mcts_probs.to(option);
-    winner_batch.to(option);
+    states_batch = states_batch.to(option);
+    mcts_probs = mcts_probs.to(option);
+    winner_batch = winner_batch.to(option);
 
     model->train();
 
