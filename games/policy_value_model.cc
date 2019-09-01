@@ -6,17 +6,17 @@
 using torch::nn::Conv2dOptions;
 NetImpl::NetImpl()
 {
-    conv1 = register_module("conv1", torch::nn::Conv2d(Conv2dOptions(9, 45, 3)));
-    conv2 = register_module("conv2", torch::nn::Conv2d(Conv2dOptions(45, 90, 3)));
+    conv1 = register_module("conv1", torch::nn::Conv2d(Conv2dOptions(9, 45, 2)));
+    conv2 = register_module("conv2", torch::nn::Conv2d(Conv2dOptions(45, 90, 2)));
     conv3 = register_module("conv3", torch::nn::Conv2d(Conv2dOptions(90, 180, 3)));
 
     // 策略网络
     pol_conv1 = register_module("pol_conv1", torch::nn::Conv2d(Conv2dOptions(180, 4, 1)));
-    pol_fc1 = register_module("pol_fc1", torch::nn::Linear(4 * width * height, width * height * width * height));
+    pol_fc1 = register_module("pol_fc1", torch::nn::Linear(4 * 2 * 2, width * height * width * height));
 
     // 价值网络
     val_conv1 = register_module("val_conv1", torch::nn::Conv2d(Conv2dOptions(180, 2, 1)));
-    val_fc1 = register_module("val_fc1", torch::nn::Linear(2 * width * height, 64));
+    val_fc1 = register_module("val_fc1", torch::nn::Linear(2 * 2 * 2, 64));
     val_fc2 = register_module("val_fc2", torch::nn::Linear(64, 1));
 }
 
@@ -29,12 +29,12 @@ std::pair<torch::Tensor, torch::Tensor> NetImpl::forward(torch::Tensor x)
 
     // 策略网络
     auto x_pol = torch::relu(pol_conv1->forward(x));
-    x_pol = x_pol.view({ -1, 4 * width * height });
+    x_pol = x_pol.view({ -1, 4 * 2 * 2 });
     x_pol = torch::log_softmax(pol_fc1->forward(x_pol), 1);
 
     // 价值网络
     auto x_val = torch::relu(val_conv1->forward(x));
-    x_val = torch::relu(val_fc1->forward(x_val.view({ -1, 2 * width * height })));
+    x_val = torch::relu(val_fc1->forward(x_val.view({ -1, 2 * 2 * 2 })));
     x_val = torch::relu(val_fc2->forward(x_val));
     x_val = torch::tanh(x_val);
 

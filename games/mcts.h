@@ -73,8 +73,8 @@ public:
     float P = 0.0;
 
     Node(int to_move, float prior = 0.0)
-        : player_to_move(to_move)
-        , move(State::no_move)
+        : move(State::no_move)
+        , player_to_move(to_move)
         , parent(nullptr)
         , P(prior)
     {
@@ -149,8 +149,8 @@ public:
 private:
     Node(int player_to_move, const Move& move_, Node* parent_, float prior)
         : move(move_)
-        , parent(parent_)
         , player_to_move(player_to_move)
+        , parent(parent_)
         , visits(0)
         , P(prior)
     {
@@ -172,7 +172,7 @@ float evaluate(
 
     for (auto& move : state.get_moves()) {
         // First we get the location from policy.
-        node->add_child(3 - state.player_to_move, move, (policy[move2index(move)]).template item<float>());
+        node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>());
     }
 
     return value.item<float>();

@@ -35,7 +35,7 @@ torch::Tensor get_statistc(Node<SurakartaState>* node)
     for (auto i = (node->children).begin(); i != (node->children).end(); ++i) {
         prob[move2index(i->first)] = i->second->visits / total;
     }
-    return prob;
+    return prob.unsqueeze_(0);
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> sample(const torch::Tensor& board,
@@ -55,14 +55,16 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> sample(const torch::Tens
     std::copy_n(order.begin(), SAMPLE_SIZE, order_sampled.begin());
 
     // 获得了取样数据的index序列
-    torch::Tensor idx = torch::from_blob(order_sampled.data(), { SAMPLE_SIZE });
+    torch::Tensor idx = torch::from_blob(order_sampled.data(), { SAMPLE_SIZE }, torch::TensorOptions().dtype(torch::kLong));
 
     return std::make_tuple(board.index_select(0, idx), mcts.index_select(0, idx), value.index_select(0, idx));
 }
 
 int main()
 {
-    torch::Tensor board, mcts, value;
+    torch::Tensor board = torch::empty({ 0 });
+    torch::Tensor mcts = torch::empty({ 0 });
+    torch::Tensor value = torch::empty({ 0 });
     // load the pt if exists
     if (exists("board.pt"))
         torch::load(board, "board.pt");
@@ -81,7 +83,9 @@ int main()
     int game = 5000;
     int batch = 0;
     for (int i = 0; i < game; ++i) {
-        torch::Tensor b, p;
+        torch::Tensor b = torch::zeros({ 0 });
+        torch::Tensor p = torch::zeros({ 0 });
+
         std::cout << "game: " << i << std::endl;
 
         // OK let's play game!
@@ -90,8 +94,8 @@ int main()
         while (game.get_winner() == 0 && count < GAME_LIMIT) {
             Node<SurakartaState> root(game.player_to_move);
             auto move = run_mcts(&root, game, network, true);
-            b = at::cat({ b, game.tensor().unsqueeze(0) });
-            p = at::cat({ p, get_statistc(&root).unsqueeze(0) });
+            b = at::cat({ b, game.tensor() }, 0);
+            p = at::cat({ p, get_statistc(&root) }, 0);
             game.do_move(move);
         }
         int winner = game.get_winner();
@@ -115,12 +119,14 @@ int main()
             torch::Tensor loss, entropy;
             std::tie(loss, entropy) = network.train_step(b, p, v);
             std::cout << "batch: " << batch++
-                      << "loss: " << loss.item<float>()
-                      << "entropy: " << entropy.item<float>()
+                      << " loss: " << loss.item<float>()
+                      << " entropy: " << entropy.item<float>()
+                      << " train dataset size: " << board.size(0)
                       << std::endl;
         }
 
-        if (i % 1000 == 0) {
+        if (i % 100 == 0) {
+            std::cout << "Saving checkpoint.........." << std::endl;
             network.save_model("value_policy.pt");
             torch::save(board, "board.pt");
             torch::save(mcts, "mcts.pt");

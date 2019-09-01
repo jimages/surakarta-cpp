@@ -131,7 +131,7 @@ void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Mo
     // now we check can we eat something.
     bool flag = 0;
     decltype(inner_loop)::const_iterator iters[2];
-    auto n = find_all(true, x, y, iters);
+    int n = find_all(true, x, y, iters);
     for (auto i = 0; i < n; ++i) {
         auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), iters[i]);
         if (move.is_activated) {
@@ -335,5 +335,5 @@ torch::Tensor SurakartaState::tensor() const
     else
         state[8] = torch::zeros({ BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
 
-    return state.to(torch::kFloat);
+    return state.to(torch::kFloat).unsqueeze_(0);
 }
