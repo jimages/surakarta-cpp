@@ -25,7 +25,8 @@ struct NetImpl : torch::nn::Module {
      */
 
     // 公共网络
-    torch::nn::Conv2d conv1 { nullptr }, conv2 { nullptr }, conv3 { nullptr };
+    torch::nn::Conv2d conv1 { nullptr };
+    torch::nn::Conv2d conv2 { nullptr };
 
     // 策略网络
     torch::nn::Conv2d pol_conv1 { nullptr };
