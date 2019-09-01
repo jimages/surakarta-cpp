@@ -20,9 +20,10 @@
 #include "policy_value_model.h"
 #include "surakarta.h"
 
-#define GAME 5000
-#define GAME_LIMIT 200
-#define SAMPLE_SIZE 2048
+#define GAME 50000000
+#define GAME_LIMIT 400
+#define SAMPLE_SIZE 4096
+#define GAME_DATA_LIMIT 5000000
 
 using MCTS::Node;
 using MCTS::run_mcts;
@@ -80,9 +81,8 @@ int main()
     if (exists("optimizer.pt"))
         torch::load(*(network.optimizer), "optimizer.pt");
 
-    int game = 5000;
     int batch = 0;
-    for (int i = 0; i < game; ++i) {
+    for (unsigned long i = 1; i < GAME; ++i) {
         torch::Tensor b = torch::zeros({ 0 });
         torch::Tensor p = torch::zeros({ 0 });
 
@@ -115,6 +115,14 @@ int main()
             torch::Tensor b, p, v;
             std::tie(b, p, v) = sample(board, mcts, value);
 
+            // 等样本数量超过限制的时候，去掉头部的数据。
+            auto size = board.size(0);
+            if (size > GAME_DATA_LIMIT) {
+                board = board.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
+                mcts = mcts.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
+                value = value.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
+            }
+
             // 训练网络
             torch::Tensor loss, entropy;
             std::tie(loss, entropy) = network.train_step(b, p, v);
@@ -125,7 +133,7 @@ int main()
                       << std::endl;
         }
 
-        if (i % 100 == 0) {
+        if (i % 1000 == 0) {
             std::cout << "Saving checkpoint.........." << std::endl;
             network.save_model("value_policy.pt");
             torch::save(board, "board.pt");
