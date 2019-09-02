@@ -103,14 +103,14 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
     std::tie(log_act_prob, value) = model->forward(states_batch);
 
     auto value_loss = mse_loss(value.view({ -1 }), winner_batch);
-    auto prob_loss = -mean(sum(mcts_probs * exp(log_act_prob), 1), kFloat);
+    auto prob_loss = -mean(sum(mcts_probs * log_act_prob, 1), kFloat);
     auto loss = value_loss + prob_loss;
 
     loss.backward();
     optimizer->step();
 
     // 计算一次策略的交叉熵，用于性能检测用途
-    auto entropy = -mean(sum(exp(log_act_prob) * mcts_probs, 1), kFloat);
+    auto entropy = -mean(sum(log_act_prob * mcts_probs, 1), kFloat);
     return std::make_pair(loss, entropy);
 }
 
