@@ -6,17 +6,17 @@
 using torch::nn::Conv2dOptions;
 NetImpl::NetImpl()
 {
-    conv1 = register_module("conv1", torch::nn::Conv2d(Conv2dOptions(9, 128, 3).padding(1)));
-    conv2 = register_module("conv2", torch::nn::Conv2d(Conv2dOptions(128, 256, 3).padding(1)));
+    conv1 = register_module("conv1", torch::nn::Conv2d(Conv2dOptions(9, 64, 3).padding(1)));
+    conv2 = register_module("conv2", torch::nn::Conv2d(Conv2dOptions(64, 128, 3).padding(1)));
+    conv3 = register_module("conv3", torch::nn::Conv2d(Conv2dOptions(128, 256, 3).padding(1)));
 
     // 策略网络
-    pol_conv1 = register_module("pol_conv1", torch::nn::Conv2d(Conv2dOptions(256, 16, 1)));
-    pol_fc1 = register_module("pol_fc1", torch::nn::Linear(16 * width * height, width * height * width * height));
+    pol_conv1 = register_module("pol_conv1", torch::nn::Conv2d(Conv2dOptions(256, 32, 1)));
+    pol_fc1 = register_module("pol_fc1", torch::nn::Linear(32 * width * height, width * height * width * height));
 
     // 价值网络
     val_conv1 = register_module("val_conv1", torch::nn::Conv2d(Conv2dOptions(256, 4, 1)));
-    val_fc1 = register_module("val_fc1", torch::nn::Linear(4 * width * height, 64));
-    val_fc2 = register_module("val_fc2", torch::nn::Linear(64, 1));
+    val_fc1 = register_module("val_fc1", torch::nn::Linear(4 * width * height, 1));
 }
 
 std::pair<torch::Tensor, torch::Tensor> NetImpl::forward(torch::Tensor x)
@@ -24,16 +24,16 @@ std::pair<torch::Tensor, torch::Tensor> NetImpl::forward(torch::Tensor x)
     // 公共的结构
     x = torch::relu(conv1->forward(x));
     x = torch::relu(conv2->forward(x));
+    x = torch::relu(conv3->forward(x));
 
     // 策略网络
     auto x_pol = torch::relu(pol_conv1->forward(x));
-    x_pol = x_pol.view({ -1, 16 * height * width });
+    x_pol = x_pol.view({ -1, 32 * height * width });
     x_pol = torch::log_softmax(pol_fc1->forward(x_pol), 1);
 
     // 价值网络
     auto x_val = torch::relu(val_conv1->forward(x));
     x_val = torch::relu(val_fc1->forward(x_val.view({ -1, 4 * width * height })));
-    x_val = torch::relu(val_fc2->forward(x_val));
     x_val = torch::tanh(x_val);
 
     return { x_pol, x_val };
@@ -103,14 +103,14 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
     std::tie(log_act_prob, value) = model->forward(states_batch);
 
     auto value_loss = mse_loss(value.view({ -1 }), winner_batch);
-    auto prob_loss = -mean(sum(mcts_probs * exp(log_act_prob)), kFloat);
+    auto prob_loss = -mean(sum(mcts_probs * exp(log_act_prob), 1), kFloat);
     auto loss = value_loss + prob_loss;
 
     loss.backward();
     optimizer->step();
 
     // 计算一次策略的交叉熵，用于性能检测用途
-    auto entropy = -mean(sum(exp(log_act_prob) * mcts_probs, kFloat));
+    auto entropy = -mean(sum(exp(log_act_prob) * mcts_probs, 1), kFloat);
     return std::make_pair(loss, entropy);
 }
 
