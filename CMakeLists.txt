@@ -38,34 +38,40 @@ ENDIF()
 MESSAGE("-- The Build type is ${CMAKE_BUILD_TYPE}")
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
-set(CMAKE_CXX_FLAGS_RELEASE "-Ofast")
+set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -DNDEBUG")
 SET (MY_LIBRARY_DEPENDENCIES)
 
-# Multithreading using OpenMP
-OPTION(OPENMP
-       "Enable multi-threading (requires OpenMP)"
-       ON)
-IF (${OPENMP})
-  FIND_PACKAGE(OpenMP)
-  IF(${OPENMP_FOUND})
-    MESSAGE("-- Found OpenMP.")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-    ADD_DEFINITIONS(-DUSE_OPENMP)
+## OpenMP
+FIND_PACKAGE(OpenMP)
+IF(${OPENMP_FOUND})
+MESSAGE("-- Found OpenMP.")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+ADD_DEFINITIONS(-DUSE_OPENMP)
 
-    IF (NOT MSVC)
-      # OpenMP needs to be included as a library on some platforms.
-      LIST(APPEND MY_LIBRARY_DEPENDENCIES omp)
-    ENDIF (NOT MSVC)
-  ELSE(${OPENMP_FOUND})
-    MESSAGE("-- Can't find OpenMP. Continuing without it.")
-  ENDIF(${OPENMP_FOUND})
-ENDIF (${OPENMP})
+IF (NOT MSVC)
+  # OpenMP needs to be included as a library on some platforms.
+  LIST(APPEND MY_LIBRARY_DEPENDENCIES omp)
+ENDIF (NOT MSVC)
+ELSE(${OPENMP_FOUND})
+MESSAGE("-- Can't find OpenMP. Continuing without it.")
+ENDIF(${OPENMP_FOUND})
 
-
+## Pytorch
 FIND_PACKAGE(Torch REQUIRED)
 LIST(APPEND MY_LIBRARY_DEPENDENCIES ${TORCH_LIBRARIES})
-#
-# gcc settings.
+
+## Boost
+FIND_PACKAGE(Boost REQUIRED
+    COMPONENTS MPI)
+LIST(APPEND MY_LIBRARY_DEPENDENCIES ${Boost_LIBRARIES})
+
+## MPI
+FIND_PACKAGE(MPI REQUIRED)
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MPI_CXX_COMPILE_OPTIONS}")
+ADD_DEFINITIONS(${MPI_CXX_COMPILE_DEFINITIONS})
+INCLUDE_DIRECTORIES(${MPI_CXX_INCLUDE_DIRS})
+LIST(APPEND MY_LIBRARY_DEPENDENCIES ${MPI_CXX_LIBRARIES})
+MESSAGE("-- ${MPI_CXX_LIBRARIES}")
 #
 IF (CMAKE_COMPILER_IS_GNUCXX)
   # No warnings for C. The Meschach library contains really old code.
@@ -79,18 +85,6 @@ ENDIF (CMAKE_COMPILER_IS_GNUCXX)
 IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-sign-compare -Wno-unused-parameter -fpic")
 ENDIF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-
-#
-# MSVC settings
-#
-IF (MSVC)
-  # Disable deprecation warning for standard functions.
-  ADD_DEFINITIONS("/wd4996")
-  # To get rid of annoying min and max macros if windows.h
-  # is included.
-  ADD_DEFINITIONS("-DNOMINMAX=1")
-  ADD_DEFINITIONS("-D_VARIADIC_MAX=6")
-ENDIF (MSVC)
 
 #
 # Include directories
