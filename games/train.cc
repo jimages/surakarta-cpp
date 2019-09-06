@@ -28,7 +28,7 @@
 #include <vector>
 
 #define GAME 50000000
-#define GAME_LIMIT 200
+#define GAME_LIMIT 300
 #define SAMPLE_SIZE 4096
 #define GAME_DATA_LIMIT 1000000
 
@@ -72,7 +72,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> sample(const torch::Tens
 void train_server()
 {
     mpi::communicator world;
-    auto size = world.size();
+    unsigned int size = world.size();
 
     unsigned long batch = 1;
     unsigned long game = 1;
@@ -106,7 +106,7 @@ void train_server()
     while (true) {
         auto req_pair = mpi::wait_any(std::begin(reqs), std::end(reqs));
         if (req_pair.first.tag() == 1) {
-            deque.emplace_back(req_pair.first.tag(), torch_deserialize(state));
+            deque.emplace_back(req_pair.first.source(), torch_deserialize(state));
             reqs[0] = world.irecv(mpi::any_source, 1, state);
         } else {
             // get board, probability, value
@@ -115,14 +115,14 @@ void train_server()
             p = torch_deserialize(dataset[1]);
             v = torch_deserialize(dataset[2]);
 
-            board = torch::cat({ board, b });
-            mcts = torch::cat({ mcts, p });
-            value = torch::cat({ value, v });
-            std::cout << "game: " << game << " dataset: " << board.size(0) << " game length:" << v.size(0) << std::endl;
+            board = torch::cat({ b, board });
+            mcts = torch::cat({ p, mcts });
+            value = torch::cat({ v, value });
+            std::cout << "game: " << game << " dataset: " << board.size(0) << " game length:" << v.size(0) << " from machine:" << req_pair.first.source() << std::endl;
 
             if (board.size(0) >= SAMPLE_SIZE) {
                 // 等样本数量超过限制的时候，去掉头部的数据。
-                auto size = board.size(0);
+                unsigned long size = board.size(0);
                 if (size > GAME_DATA_LIMIT) {
                     board = board.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
                     mcts = mcts.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
@@ -171,8 +171,9 @@ void train_server()
             assert(policy.size(0) == static_cast<long long>(source.size()));
             // send back the evolution data;
             std::vector<mpi::request> reqs;
+            long ind = 0;
             for (auto i = source.begin(); i != source.end(); ++i) {
-                reqs.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy[*i]), torch_serialize(value[*i]))));
+                reqs.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy[ind]), torch_serialize(value[ind]))));
             }
             mpi::wait_all(reqs.begin(), reqs.end());
         }
