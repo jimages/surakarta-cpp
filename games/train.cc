@@ -74,8 +74,8 @@ void train_server()
     mpi::communicator world;
     auto size = world.size();
 
-    unsigned long batch = 0;
-    unsigned long game = 0;
+    unsigned long batch = 1;
+    unsigned long game = 1;
     torch::Tensor board = torch::empty({ 0 });
     torch::Tensor mcts = torch::empty({ 0 });
     torch::Tensor value = torch::empty({ 0 });
@@ -118,10 +118,9 @@ void train_server()
             board = torch::cat({ board, b });
             mcts = torch::cat({ mcts, p });
             value = torch::cat({ value, v });
+            std::cout << "game: " << game << " dataset: " << board.size(0) << " game length:" << v.size(0) << std::endl;
 
             if (board.size(0) >= SAMPLE_SIZE) {
-                game += b.size(0);
-                std::cout << "game: " << game << std::endl;
                 // 等样本数量超过限制的时候，去掉头部的数据。
                 auto size = board.size(0);
                 if (size > GAME_DATA_LIMIT) {
@@ -150,11 +149,12 @@ void train_server()
                 torch::save(value, "value.pt");
                 torch::save(*(network.optimizer), "optimizer.pt");
             }
+            ++game;
             reqs[1] = world.irecv(mpi::any_source, 2, dataset);
         }
 
         // evoluate the state
-        if (deque.size() >= (size / 2ul)) {
+        if (deque.size() == (size - 1)) {
             std::vector<int> source;
             torch::Tensor states = torch::empty({ 0 });
 
@@ -172,7 +172,7 @@ void train_server()
             // send back the evolution data;
             std::vector<mpi::request> reqs;
             for (auto i = source.begin(); i != source.end(); ++i) {
-                reqs.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy), torch_serialize(value))));
+                reqs.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy[*i]), torch_serialize(value[*i]))));
             }
             mpi::wait_all(reqs.begin(), reqs.end());
         }

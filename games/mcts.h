@@ -172,7 +172,7 @@ inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const tor
     world.send(0, 1, torch_serialize(state));
     world.recv(0, 1, data);
 
-    return { torch_deserialize(data.first), torch_deserialize(data.second) };
+    return { torch_deserialize(data.first).unsqueeze(0), torch_deserialize(data.second).unsqueeze(0) };
 }
 
 template <typename State>
