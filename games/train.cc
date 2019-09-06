@@ -73,6 +73,7 @@ void train_server()
 {
     mpi::communicator world;
     unsigned int size = world.size();
+    std::cout << "total processes: " << size << std::endl;
 
     unsigned long batch = 1;
     unsigned long game = 1;
@@ -118,7 +119,7 @@ void train_server()
             board = torch::cat({ b, board });
             mcts = torch::cat({ p, mcts });
             value = torch::cat({ v, value });
-            std::cout << "game: " << game << " dataset: " << board.size(0) << " game length:" << v.size(0) << " from machine:" << req_pair.first.source() << std::endl;
+            std::cout << "game: " << game << " dataset: " << board.size(0) << " game length:" << v.size(0) << " from process:" << req_pair.first.source() << std::endl;
 
             if (board.size(0) >= SAMPLE_SIZE) {
                 // 等样本数量超过限制的时候，去掉头部的数据。
