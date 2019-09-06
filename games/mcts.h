@@ -185,6 +185,10 @@ float evaluate(
     torch::Tensor policy, value;
     std::tie(policy, value) = distribute_policy_value(state.tensor(), world);
 
+    // 确认是否进入了cpu
+    assert(policy.device() == torch::kCPU);
+    assert(value.device() == torch::kCPU);
+
     for (auto& move : state.get_moves()) {
         // First we get the location from policy.
         node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>());

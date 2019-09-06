@@ -79,7 +79,7 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::policy_value(const torch
 
     auto result = model->forward(tgt);
 
-    return result;
+    return { result.first.cpu(), result.second.cpu() };
 }
 
 /*
