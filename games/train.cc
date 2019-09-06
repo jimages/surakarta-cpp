@@ -1,12 +1,24 @@
 /*
  * 自对弈训练程序
  */
+#include "helper.h"
+#include "mcts.h"
+#include "policy_value_model.h"
+#include "surakarta.h"
 #include <algorithm>
 #include <array>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/mpi.hpp>
+#include <boost/serialization/array.hpp>
+#include <boost/serialization/string.hpp>
+#include <boost/serialization/utility.hpp>
 #include <cassert>
 #include <cerrno>
 #include <cstdlib>
+#include <deque>
 #include <iostream>
+#include <iterator>
 #include <numeric>
 #include <random>
 #include <torch/torch.h>
@@ -15,18 +27,14 @@
 #include <utility>
 #include <vector>
 
-#include "helper.h"
-#include "mcts.h"
-#include "policy_value_model.h"
-#include "surakarta.h"
-
 #define GAME 50000000
-#define GAME_LIMIT 400
+#define GAME_LIMIT 200
 #define SAMPLE_SIZE 4096
 #define GAME_DATA_LIMIT 1000000
 
 using MCTS::Node;
-using MCTS::run_mcts;
+using MCTS::run_mcts_distribute;
+namespace mpi = boost::mpi;
 
 torch::Tensor get_statistc(Node<SurakartaState>* node)
 {
@@ -61,11 +69,19 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> sample(const torch::Tens
     return std::make_tuple(board.index_select(0, idx), mcts.index_select(0, idx), value.index_select(0, idx));
 }
 
-int main()
+void train_server()
 {
+    mpi::communicator world;
+    auto size = world.size();
+
+    unsigned long batch = 0;
+    unsigned long game = 0;
     torch::Tensor board = torch::empty({ 0 });
     torch::Tensor mcts = torch::empty({ 0 });
     torch::Tensor value = torch::empty({ 0 });
+
+    std::deque<std::pair<int, torch::Tensor>> deque;
+
     // load the pt if exists
     if (exists("board.pt"))
         torch::load(board, "board.pt");
@@ -73,30 +89,113 @@ int main()
         torch::load(mcts, "mcts.pt");
     if (exists("value.pt"))
         torch::load(value, "value.pt");
+
     PolicyValueNet network;
-    std::ios::sync_with_stdio(false);
 
     if (exists("value_policy.pt"))
         network.load_model("value_policy.pt");
     if (exists("optimizer.pt"))
         torch::load(*(network.optimizer), "optimizer.pt");
 
-    int batch = 0;
-    for (unsigned long i = 1; i < GAME; ++i) {
+    std::string state;
+    std::array<std::string, 3> dataset;
+    mpi::request reqs[2];
+    // tag 1 stand for evaluation. tag 2 stand for train data
+    reqs[0] = world.irecv(mpi::any_source, 1, state);
+    reqs[1] = world.irecv(mpi::any_source, 2, dataset);
+    while (true) {
+        auto req_pair = mpi::wait_any(std::begin(reqs), std::end(reqs));
+        if (req_pair.first.tag() == 1) {
+            deque.emplace_back(req_pair.first.tag(), torch_deserialize(state));
+            reqs[0] = world.irecv(mpi::any_source, 1, state);
+        } else {
+            // get board, probability, value
+            torch::Tensor b, p, v;
+            b = torch_deserialize(dataset[0]);
+            p = torch_deserialize(dataset[1]);
+            v = torch_deserialize(dataset[2]);
+
+            board = torch::cat({ board, b });
+            mcts = torch::cat({ mcts, p });
+            value = torch::cat({ value, v });
+
+            if (board.size(0) >= SAMPLE_SIZE) {
+                game += b.size(0);
+                std::cout << "game: " << game << std::endl;
+                // 等样本数量超过限制的时候，去掉头部的数据。
+                auto size = board.size(0);
+                if (size > GAME_DATA_LIMIT) {
+                    board = board.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
+                    mcts = mcts.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
+                    value = value.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
+                }
+                // 训练网络
+                torch::Tensor loss, entropy;
+                std::tie(b, p, v) = sample(board, mcts, value);
+                std::tie(loss, entropy) = network.train_step(b, p, v);
+                std::cout << "batch: " << batch++
+                          << " loss: " << loss.item<float>()
+                          << " entropy: " << entropy.item<float>()
+                          << " train dataset size: " << board.size(0)
+                          << std::endl;
+                std::cout << "batch: " << batch << std::endl;
+            }
+
+            // saving the model
+            if (batch % 1000 == 0) {
+                std::cout << "Saving checkpoint.........." << std::endl;
+                network.save_model("value_policy.pt");
+                torch::save(board, "board.pt");
+                torch::save(mcts, "mcts.pt");
+                torch::save(value, "value.pt");
+                torch::save(*(network.optimizer), "optimizer.pt");
+            }
+            reqs[1] = world.irecv(mpi::any_source, 2, dataset);
+        }
+
+        // evoluate the state
+        if (deque.size() >= (size / 2ul)) {
+            std::vector<int> source;
+            torch::Tensor states = torch::empty({ 0 });
+
+            while (!deque.empty()) {
+                auto d = deque.front();
+                source.emplace_back(d.first);
+                states = at::cat({ states, d.second });
+                deque.pop_front();
+            }
+
+            torch::Tensor policy, value;
+            std::tie(policy, value) = network.policy_value(states);
+
+            assert(policy.size(0) == static_cast<long long>(source.size()));
+            // send back the evolution data;
+            std::vector<mpi::request> reqs;
+            for (auto i = source.begin(); i != source.end(); ++i) {
+                reqs.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy), torch_serialize(value))));
+            }
+            mpi::wait_all(reqs.begin(), reqs.end());
+        }
+    }
+}
+
+void worker()
+{
+    mpi::communicator world;
+    while (true) {
         torch::Tensor b = torch::zeros({ 0 });
         torch::Tensor p = torch::zeros({ 0 });
-
-        std::cout << "game: " << i << std::endl;
 
         // OK let's play game!
         size_t count = 0;
         SurakartaState game;
         while (game.get_winner() == 0 && count < GAME_LIMIT) {
             Node<SurakartaState> root(game.player_to_move);
-            auto move = run_mcts(&root, game, network, true);
+            auto move = run_mcts_distribute(&root, game, world, true);
             b = at::cat({ b, game.tensor() }, 0);
             p = at::cat({ p, get_statistc(&root) }, 0);
             game.do_move(move);
+            ++count;
         }
         int winner = game.get_winner();
         // play 1 or 2;
@@ -105,41 +204,24 @@ int main()
         for (int i = 0; i < size; ++i) {
             v[i] = (i + 1) % 2 == winner ? 1.0f : 0.0f;
         }
+        std::array<std::string, 3> dataset;
+        dataset[0] = torch_serialize(b);
+        dataset[1] = torch_serialize(p);
+        dataset[2] = torch_serialize(v);
+        world.send(0, 2, dataset);
+    }
+}
 
-        // in the end cat the value.
-        board = torch::cat({ board, b });
-        mcts = torch::cat({ mcts, p });
-        value = torch::cat({ value, v });
+int main(int argc, char* argv[])
+{
+    mpi::environment env(argc, argv);
+    mpi::communicator world;
+    auto rank = world.rank();
+    std::ios::sync_with_stdio(false);
 
-        if (board.size(0) > SAMPLE_SIZE) {
-            torch::Tensor b, p, v;
-            std::tie(b, p, v) = sample(board, mcts, value);
-
-            // 等样本数量超过限制的时候，去掉头部的数据。
-            auto size = board.size(0);
-            if (size > GAME_DATA_LIMIT) {
-                board = board.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
-                mcts = mcts.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
-                value = value.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
-            }
-
-            // 训练网络
-            torch::Tensor loss, entropy;
-            std::tie(loss, entropy) = network.train_step(b, p, v);
-            std::cout << "batch: " << batch++
-                      << " loss: " << loss.item<float>()
-                      << " entropy: " << entropy.item<float>()
-                      << " train dataset size: " << board.size(0)
-                      << std::endl;
-        }
-
-        if (i % 1000 == 0) {
-            std::cout << "Saving checkpoint.........." << std::endl;
-            network.save_model("value_policy.pt");
-            torch::save(board, "board.pt");
-            torch::save(mcts, "mcts.pt");
-            torch::save(value, "value.pt");
-            torch::save(*(network.optimizer), "optimizer.pt");
-        }
+    if (rank == 0) {
+        train_server();
+    } else {
+        worker();
     }
 }

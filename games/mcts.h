@@ -16,6 +16,10 @@
 // http://mcts.ai/code/python.html
 //
 #include <algorithm>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/mpi.hpp>
+#include <boost/serialization/utility.hpp>
 #include <cmath>
 #include <cstdlib>
 #include <future>
@@ -29,6 +33,7 @@
 #include <torch/torch.h>
 #include <vector>
 
+#include "helper.h"
 #include "policy_value_model.h"
 #ifdef USE_OPENMP
 #include <omp.h>
@@ -48,6 +53,7 @@
 //     https://github.com/PetterS/monte-carlo-tree-search
 //
 
+namespace mpi = boost::mpi;
 namespace MCTS {
 using std::cerr;
 using std::endl;
@@ -159,16 +165,25 @@ private:
 
 /////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////
+inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const torch::Tensor& state, mpi::communicator world)
+{
+    std::string str;
+    std::pair<std::string, std::string> data;
+    world.send(0, 1, torch_serialize(state));
+    world.recv(0, 1, data);
+
+    return { torch_deserialize(data.first), torch_deserialize(data.second) };
+}
 
 template <typename State>
 float evaluate(
-    Node<State>* node, const State& state, PolicyValueNet& network)
+    Node<State>* node, const State& state, mpi::communicator world)
 {
     assert(!node->expanded());
     assert(state.has_moves());
 
     torch::Tensor policy, value;
-    std::tie(policy, value) = network.policy_value(state.tensor());
+    std::tie(policy, value) = distribute_policy_value(state.tensor(), world);
 
     for (auto& move : state.get_moves()) {
         // First we get the location from policy.
@@ -206,26 +221,26 @@ void history(const Node<State>* leaf)
 }
 
 template <typename State>
-typename State::Move run_mcts(Node<State>* root, const State& state, PolicyValueNet& network, bool is_selfplay = false)
+typename State::Move run_mcts_distribute(Node<State>* root, const State& state, mpi::communicator world, bool is_selfplay = false)
 {
     assert(!root->expanded());
     assert(root != nullptr);
-    auto node = root;
-    auto game = state;
 
-    evaluate(root, state, network);
+    evaluate(root, state, world);
     if (is_selfplay)
         root->add_exploration_noise();
 
     for (int i = 0; i < SIMULATION; ++i) {
+        auto node = root;
+        auto game = state;
 
         while (node->expanded()) {
             typename State::Move move;
             std::tie(move, node) = node->best_child();
         }
+        float value = evaluate(node, game, world);
+        backpropagate(node, game.player_to_move, value);
     }
-    float value = evaluate(node, game, network);
-    backpropagate(node, game.player_to_move, value);
 
     return root->best_action().first;
 }

@@ -68,16 +68,16 @@ PolicyValueNet::~PolicyValueNet()
 /*
  * 获得输入一个batch的棋局batsh，获得policy和value
  */
-std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::policy_value(torch::Tensor states)
+std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::policy_value(const torch::Tensor states)
 {
     torch::TensorOptions options;
+    torch::Tensor tgt;
     options = options.device(device).dtype(torch::kFloat);
-    states = states.to(options);
+    tgt = states.to(options);
 
     model->eval();
 
-    auto result = model->forward(states);
-    torch::exp_(result.first);
+    auto result = model->forward(tgt);
 
     return result;
 }
