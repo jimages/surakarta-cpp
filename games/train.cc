@@ -31,6 +31,7 @@
 #define GAME_LIMIT 300
 #define SAMPLE_SIZE 4096
 #define GAME_DATA_LIMIT 1000000
+#define EVO_BATCH 1
 
 using MCTS::Node;
 using MCTS::run_mcts_distribute;
@@ -77,6 +78,7 @@ void train_server()
 
     unsigned long batch = 1;
     unsigned long game = 1;
+    unsigned long long evo_batch = 0;
     torch::Tensor board = torch::empty({ 0 });
     torch::Tensor mcts = torch::empty({ 0 });
     torch::Tensor value = torch::empty({ 0 });
@@ -110,6 +112,7 @@ void train_server()
             deque.emplace_back(req_pair.first.source(), torch_deserialize(state));
             reqs[0] = world.irecv(mpi::any_source, 1, state);
         } else {
+		evo_batch = 0;
             // get board, probability, value
             torch::Tensor b, p, v;
             b = torch_deserialize(dataset[0]);
@@ -123,6 +126,7 @@ void train_server()
 
             if (board.size(0) >= SAMPLE_SIZE) {
                 // 等样本数量超过限制的时候，去掉头部的数据。
+		    std::cout << std::endl;
                 unsigned long size = board.size(0);
                 if (size > GAME_DATA_LIMIT) {
                     board = board.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
@@ -155,7 +159,7 @@ void train_server()
         }
 
         // evoluate the state
-        if (deque.size() == (size - 1)) {
+        if (deque.size() == EVO_BATCH) {
             std::vector<int> source;
             torch::Tensor states = torch::empty({ 0 });
 
@@ -177,6 +181,14 @@ void train_server()
                 reqs.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy[ind]), torch_serialize(value[ind]))));
             }
             mpi::wait_all(reqs.begin(), reqs.end());
+	    evo_batch += EVO_BATCH;
+	    if (evo_batch == 0) {
+		    std::cout << evo_batch;
+		    std::cout.flush();
+	    } else {
+		    std::cout << "\r" << evo_batch;
+		    std::cout.flush();
+	    }
         }
     }
 }
