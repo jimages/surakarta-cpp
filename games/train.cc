@@ -122,11 +122,11 @@ void train_server()
             board = torch::cat({ b, board });
             mcts = torch::cat({ p, mcts });
             value = torch::cat({ v, value });
+            std::cout << std::endl;
             std::cout << "game: " << game << " dataset: " << board.size(0) << " game length:" << v.size(0) << " from process:" << req_pair.first.source() << std::endl;
 
             if (board.size(0) >= SAMPLE_SIZE) {
                 // 等样本数量超过限制的时候，去掉头部的数据。
-                std::cout << std::endl;
                 unsigned long size = board.size(0);
                 if (size > GAME_DATA_LIMIT) {
                     board = board.narrow(0, size - GAME_DATA_LIMIT - 1, GAME_DATA_LIMIT);
@@ -158,7 +158,7 @@ void train_server()
         }
 
         // evoluate the state
-        if (deque.size() == EVO_BATCH) {
+        if (deque.size() >= EVO_BATCH) {
             std::vector<int> source;
             torch::Tensor states = torch::empty({ 0 });
 
