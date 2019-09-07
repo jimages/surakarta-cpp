@@ -182,7 +182,7 @@ void train_server()
             // test all the requests
             for (auto req = d_trans_queue.begin(); req != d_trans_queue.end();) {
                 auto status = req->test();
-                if (status.has_value()) {
+                if (status) {
                     req = d_trans_queue.erase(req);
                 } else {
                     ++req;
@@ -233,7 +233,7 @@ void worker()
         d_trans_queue.push_back(world.isend(0, 2, dataset));
         for (auto req = d_trans_queue.begin(); req != d_trans_queue.end();) {
             auto status = req->test();
-            if (status.has_value()) {
+            if (status) {
                 req = d_trans_queue.erase(req);
             } else {
                 ++req;
