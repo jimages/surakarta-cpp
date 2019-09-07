@@ -108,11 +108,14 @@ void train_server()
     reqs[0] = world.irecv(mpi::any_source, 1, state);
     reqs[1] = world.irecv(mpi::any_source, 2, dataset);
     while (true) {
-        auto req_pair = mpi::wait_any(std::begin(reqs), std::end(reqs));
-        if (req_pair.first.tag() == 1) {
-            deque.emplace_back(req_pair.first.source(), torch_deserialize(state));
+        boost::optional<mpi::status> status;
+        if (status = reqs[0].test()) {
+
+            deque.emplace_back(status->source(), torch_deserialize(state));
             reqs[0] = world.irecv(mpi::any_source, 1, state);
-        } else {
+        }
+
+        if (status = reqs[1].test()) {
             evo_batch = 0;
             // get board, probability, value
             torch::Tensor b, p, v;
@@ -124,7 +127,11 @@ void train_server()
             mcts = torch::cat({ p, mcts });
             value = torch::cat({ v, value });
             std::cout << std::endl;
-            std::cout << "game: " << game << " dataset: " << board.size(0) << " game length:" << v.size(0) << " from process:" << req_pair.first.source() << std::endl;
+            std::cout << "game: " << game
+                      << " dataset: " << board.size(0)
+                      << " game length:" << v.size(0)
+                      << " from process:" << status->source()
+                      << std::endl;
 
             if (board.size(0) >= SAMPLE_SIZE) {
                 // 等样本数量超过限制的时候，去掉头部的数据。
@@ -178,16 +185,6 @@ void train_server()
             for (auto i = source.begin(); i != source.end(); ++i) {
                 d_trans_queue.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy[ind]), torch_serialize(value[ind]))));
             }
-
-            // test all the requests
-            for (auto req = d_trans_queue.begin(); req != d_trans_queue.end();) {
-                auto status = req->test();
-                if (status) {
-                    req = d_trans_queue.erase(req);
-                } else {
-                    ++req;
-                }
-            }
             evo_batch += EVO_BATCH;
             if (evo_batch == 0) {
                 std::cout << evo_batch;
@@ -195,6 +192,15 @@ void train_server()
             } else {
                 std::cout << "\r" << evo_batch;
                 std::cout.flush();
+            }
+        }
+        // test all the requests
+        for (auto req = d_trans_queue.begin(); req != d_trans_queue.end();) {
+            auto status = req->test();
+            if (status) {
+                req = d_trans_queue.erase(req);
+            } else {
+                ++req;
             }
         }
     }
