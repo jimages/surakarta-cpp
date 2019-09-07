@@ -74,6 +74,7 @@ void train_server()
 {
     mpi::communicator world;
     unsigned int size = world.size();
+    std::vector<mpi::request> d_trans_queue;
     std::cout << "total processes: " << size << std::endl;
 
     unsigned long batch = 1;
@@ -173,13 +174,20 @@ void train_server()
             std::tie(policy, value) = network.policy_value(states);
 
             assert(policy.size(0) == static_cast<long long>(source.size()));
-            // send back the evolution data;
-            std::vector<mpi::request> reqs;
             long ind = 0;
             for (auto i = source.begin(); i != source.end(); ++i) {
-                reqs.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy[ind]), torch_serialize(value[ind]))));
+                d_trans_queue.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy[ind]), torch_serialize(value[ind]))));
             }
-            mpi::wait_all(reqs.begin(), reqs.end());
+
+            // test all the requests
+            for (auto req = d_trans_queue.begin(); req != d_trans_queue.end();) {
+                auto status = req->test();
+                if (status.has_value()) {
+                    req = d_trans_queue.erase(req);
+                } else {
+                    ++req;
+                }
+            }
             evo_batch += EVO_BATCH;
             if (evo_batch == 0) {
                 std::cout << evo_batch;
@@ -195,6 +203,7 @@ void train_server()
 void worker()
 {
     mpi::communicator world;
+    std::vector<mpi::request> d_trans_queue;
     while (true) {
         torch::Tensor b = torch::zeros({ 0 });
         torch::Tensor p = torch::zeros({ 0 });
@@ -215,13 +224,21 @@ void worker()
         int size = b.size(0);
         auto v = torch::zeros({ size }, torch::kFloat);
         for (int i = 0; i < size; ++i) {
-            v[i] = (i + 1) % 2 == winner ? 1.0f : 0.0f;
+            v[i] = (i + 1) % 2 == winner ? 1.0F : 0.0F;
         }
         std::array<std::string, 3> dataset;
         dataset[0] = torch_serialize(b);
         dataset[1] = torch_serialize(p);
         dataset[2] = torch_serialize(v);
-        world.send(0, 2, dataset);
+        d_trans_queue.push_back(world.isend(0, 2, dataset));
+        for (auto req = d_trans_queue.begin(); req != d_trans_queue.end();) {
+            auto status = req->test();
+            if (status.has_value()) {
+                req = d_trans_queue.erase(req);
+            } else {
+                ++req;
+            }
+        }
     }
 }
 
