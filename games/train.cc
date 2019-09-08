@@ -76,6 +76,7 @@ void train_server()
     unsigned int size = world.size();
     std::vector<mpi::request> d_trans_queue;
     std::cout << "total processes: " << size << std::endl;
+    std::cout << "the simulation count:" << SIMULATION << std::endl;
 
     unsigned long batch = 1;
     unsigned long game = 1;

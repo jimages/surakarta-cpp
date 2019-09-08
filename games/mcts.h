@@ -41,7 +41,11 @@
 
 #define PB_C_BASE 19652.0f
 #define PB_C_INIT 1.25f
+#ifdef NDEBUG
 #define SIMULATION 800
+#else
+#define SIMULATION 10
+#endif // NDEBUG
 
 //
 //
@@ -241,6 +245,7 @@ typename State::Move run_mcts_distribute(Node<State>* root, const State& state, 
         while (node->expanded()) {
             typename State::Move move;
             std::tie(move, node) = node->best_child();
+            game.do_move(move);
         }
         float value = evaluate(node, game, world);
         backpropagate(node, game.player_to_move, value);
