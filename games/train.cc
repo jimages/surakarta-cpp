@@ -154,7 +154,7 @@ void train_server()
             }
 
             // saving the model
-            if (batch % 1000 == 0) {
+            if (batch % 100 == 0) {
                 std::cout << "Saving checkpoint.........." << std::endl;
                 network.save_model("value_policy.pt");
                 torch::save(board, "board.pt");
