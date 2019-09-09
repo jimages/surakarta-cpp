@@ -44,7 +44,7 @@
 #ifdef NDEBUG
 #define SIMULATION 800
 #else
-#define SIMULATION 10
+#define SIMULATION 100
 #endif // NDEBUG
 
 //
@@ -141,7 +141,7 @@ public:
         assert(parent != nullptr);
 
         float pb_c = std::log((static_cast<float>(parent->visits) + PB_C_BASE + 1) / PB_C_BASE) + PB_C_INIT;
-        pb_c += std::sqrt(static_cast<float>(parent->visits) / (static_cast<float>(visits) + 1));
+        pb_c *= std::sqrt(static_cast<float>(parent->visits) / (static_cast<float>(visits) + 1));
 
         return pb_c * P + value();
     }
@@ -176,7 +176,7 @@ inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const tor
     world.send(0, 1, torch_serialize(state));
     world.recv(0, 1, data);
 
-    return { torch_deserialize(data.first).unsqueeze(0), torch_deserialize(data.second).unsqueeze(0) };
+    return { torch_deserialize(data.first).unsqueeze(0).exp(), torch_deserialize(data.second).unsqueeze(0) };
 }
 
 template <typename State>
@@ -207,22 +207,6 @@ void backpropagate(
         leaf->visits++;
         leaf = leaf->parent;
     }
-}
-
-template <typename State>
-void history(const Node<State>* leaf)
-{
-    assert(leaf != nullptr);
-
-    std::vector<const Node<State>*> history;
-    history.reverse(60);
-
-    while (leaf != nullptr) {
-        history.push_back(leaf);
-        leaf = leaf->parent;
-    }
-
-    return history;
 }
 
 template <typename State>

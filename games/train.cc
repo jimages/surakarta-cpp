@@ -123,6 +123,7 @@ void train_server()
             b = torch_deserialize(dataset[0]);
             p = torch_deserialize(dataset[1]);
             v = torch_deserialize(dataset[2]);
+            std::cout << b[0] << p[0] << v << std::endl;
 
             board = torch::cat({ b, board });
             mcts = torch::cat({ p, mcts });
@@ -178,13 +179,13 @@ void train_server()
                 deque.pop_front();
             }
 
-            torch::Tensor policy, value;
-            std::tie(policy, value) = network.policy_value(states);
+            torch::Tensor policy_logit, value;
+            std::tie(policy_logit, value) = network.policy_value(states);
 
-            assert(policy.size(0) == static_cast<long long>(source.size()));
+            assert(policy_logit.size(0) == static_cast<long long>(source.size()));
             long ind = 0;
             for (auto i = source.begin(); i != source.end(); ++i) {
-                d_trans_queue.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy[ind]), torch_serialize(value[ind]))));
+                d_trans_queue.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
             }
             evo_batch += EVO_BATCH;
             if (evo_batch == 0) {

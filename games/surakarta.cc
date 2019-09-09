@@ -323,8 +323,8 @@ torch::Tensor SurakartaState::tensor() const
     state[5] = torch::__and__(state[1], inner_loop_mask);
     // 对方上一步移动的棋子
     if (last_move != no_move && last_move.is_activated) {
-        state[6][last_move.current.first][last_move.current.second] = 1;
-        state[7][last_move.target.first][last_move.target.second] = 1;
+        state[6][last_move.current.second][last_move.current.first] = 1;
+        state[7][last_move.target.second][last_move.target.first] = 1;
     } else {
         state[6] = torch::zeros({ BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
         state[7] = torch::zeros({ BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
