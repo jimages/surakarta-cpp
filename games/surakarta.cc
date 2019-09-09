@@ -38,7 +38,7 @@ const torch::Tensor SurakartaState::outter_loop_mask = torch::from_blob((int[BOA
                                                                             0, 1, 0, 0, 1, 0,
                                                                             1, 1, 1, 1, 1, 1,
                                                                             0, 1, 0, 0, 1, 0 },
-    { BOARD_SIZE, BOARD_SIZE });
+    { BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
 const torch::Tensor SurakartaState::inner_loop_mask = torch::from_blob((int[BOARD_SIZE* BOARD_SIZE]) {
                                                                            0, 0, 1, 1, 0, 0,
                                                                            0, 0, 1, 1, 0, 0,
@@ -46,7 +46,7 @@ const torch::Tensor SurakartaState::inner_loop_mask = torch::from_blob((int[BOAR
                                                                            1, 1, 1, 1, 1, 1,
                                                                            0, 0, 1, 1, 0, 0,
                                                                            0, 0, 1, 1, 0, 0 },
-    { BOARD_SIZE, BOARD_SIZE });
+    { BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
 
 void SurakartaState::do_move(Move move, bool is_human)
 {
@@ -264,7 +264,7 @@ int SurakartaState::get_winner() const
         }
     }
 
-    // 如歌有一方没有可行动作，则判断谁的子多即可
+    // 如果有一方没有可行动作，则判断谁的子多即可
     auto tmp_moves = get_moves();
     if (tmp_moves.empty()) {
         int num[3] = { 0 };
@@ -309,18 +309,18 @@ torch::Tensor SurakartaState::tensor() const
     for (size_t i = 0; i < BOARD_SIZE * BOARD_SIZE; ++i)
         boardInt[i] = static_cast<int>(board[i]);
 
-    auto state = torch::zeros({ 9, BOARD_SIZE, BOARD_SIZE });
-    auto boardTensor = torch::from_blob(boardInt, { BOARD_SIZE, BOARD_SIZE });
+    torch::Tensor state = torch::zeros({ 9, BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
+    torch::Tensor boardTensor = torch::from_blob(boardInt, { BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
 
     // 双方棋子的位置棋子的位置
-    state[0] = (boardTensor == player_to_move);
-    state[1] = (boardTensor == (3 - player_to_move));
+    state[0] = (boardTensor == player_to_move).to(torch::TensorOptions().dtype(torch::kInt));
+    state[1] = (boardTensor == (3 - player_to_move)).to(torch::TensorOptions().dtype(torch::kInt));
     // 外环的棋子
-    state[2] = state[0] == outter_loop_mask;
-    state[3] = state[1] == outter_loop_mask;
+    state[2] = torch::__and__(state[0], outter_loop_mask);
+    state[3] = torch::__and__(state[1], outter_loop_mask);
     // 内环的棋子
-    state[4] = state[0] == inner_loop_mask;
-    state[5] = state[1] == inner_loop_mask;
+    state[4] = torch::__and__(state[0], inner_loop_mask);
+    state[5] = torch::__and__(state[1], inner_loop_mask);
     // 对方上一步移动的棋子
     if (last_move != no_move && last_move.is_activated) {
         state[6][last_move.current.first][last_move.current.second] = 1;

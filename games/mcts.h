@@ -183,9 +183,6 @@ template <typename State>
 float evaluate(
     Node<State>* node, const State& state, mpi::communicator world)
 {
-    assert(!node->expanded());
-    assert(state.has_moves());
-
     torch::Tensor policy, value;
     std::tie(policy, value) = distribute_policy_value(state.tensor(), world);
 
