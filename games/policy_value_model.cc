@@ -5,31 +5,38 @@
 
 using torch::nn::Conv2dOptions;
 NetImpl::NetImpl()
-{
-    conv1 = register_module("conv1", torch::nn::Conv2d(Conv2dOptions(9, 64, 3).padding(1)));
-    conv2 = register_module("conv2", torch::nn::Conv2d(Conv2dOptions(64, 128, 3).padding(1)));
-    conv3 = register_module("conv3", torch::nn::Conv2d(Conv2dOptions(128, 256, 3).padding(1)));
-
+    : conv1(register_module("conv1", torch::nn::Conv2d(Conv2dOptions(9, 256, 3).padding(1))))
+    , conv2(register_module("conv2", torch::nn::Conv2d(Conv2dOptions(256, 256, 3).padding(1))))
+    , conv3(register_module("conv3", torch::nn::Conv2d(Conv2dOptions(256, 256, 3).padding(1))))
+    , conv4(register_module("conv4", torch::nn::Conv2d(Conv2dOptions(256, 256, 3).padding(1))))
+    , bat1(register_module("bat1", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
+    , bat2(register_module("bat2", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
+    , bat3(register_module("bat3", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
     // 策略网络
-    pol_conv1 = register_module("pol_conv1", torch::nn::Conv2d(Conv2dOptions(256, 32, 1)));
-    pol_fc1 = register_module("pol_fc1", torch::nn::Linear(32 * width * height, width * height * width * height));
+    , pol_conv1(register_module("pol_conv1", torch::nn::Conv2d(Conv2dOptions(256, 256, 1))))
+    , pol_fc1(register_module("pol_fc1", torch::nn::Linear(256 * width * height, width * height * width * height)))
+    , pol_bat(register_module("pol_bat", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
 
     // 价值网络
-    val_conv1 = register_module("val_conv1", torch::nn::Conv2d(Conv2dOptions(256, 4, 1)));
-    val_fc1 = register_module("val_fc1", torch::nn::Linear(4 * width * height, 1));
+    , val_conv1(register_module("val_conv1", torch::nn::Conv2d(Conv2dOptions(256, 4, 1))))
+    , val_fc1(register_module("val_fc1", torch::nn::Linear(4 * width * height, 1)))
+
+{
 }
 
 std::pair<torch::Tensor, torch::Tensor> NetImpl::forward(torch::Tensor x)
 {
     // 公共的结构
     x = torch::relu(conv1->forward(x));
-    x = torch::relu(conv2->forward(x));
-    x = torch::relu(conv3->forward(x));
+    x = torch::relu(bat1(conv2->forward(x)));
+    x = torch::relu(bat2(conv3->forward(x)));
+    x = torch::relu(bat3(conv4->forward(x)));
 
     // 策略网络
-    auto x_pol = torch::relu(pol_conv1->forward(x));
-    x_pol = x_pol.view({ -1, 32 * height * width });
+    auto x_pol = torch::relu(pol_bat(pol_conv1->forward(x)));
+    x_pol = x_pol.view({ -1, 256 * height * width });
     x_pol = torch::log_softmax(pol_fc1->forward(x_pol), 1);
+    std::cout << x_pol[0].exp_() << std::endl;
 
     // 价值网络
     auto x_val = torch::relu(val_conv1->forward(x));
@@ -72,7 +79,7 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::policy_value(const torch
 {
     torch::TensorOptions options;
     torch::Tensor tgt;
-    options = options.device(device).dtype(torch::kFloat);
+    options = options.device(device).dtype(torch::kFloat32);
     tgt = states.to(options);
 
     model->eval();
@@ -90,7 +97,7 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
     using namespace torch;
     TensorOptions option;
     option = option.device(device);
-    option = option.dtype(kFloat);
+    option = option.dtype(kFloat32);
     states_batch = states_batch.to(option);
     mcts_probs = mcts_probs.to(option);
     winner_batch = winner_batch.to(option);
@@ -103,14 +110,14 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
     std::tie(log_act_prob, value) = model->forward(states_batch);
 
     auto value_loss = mse_loss(value.view({ -1 }), winner_batch);
-    auto prob_loss = -mean(sum(mcts_probs.exp() * log_act_prob, 1), kFloat);
+    auto prob_loss = -mean(sum(mcts_probs.exp() * log_act_prob, 1), kFloat32);
     auto loss = value_loss + prob_loss;
 
     loss.backward();
     optimizer->step();
 
     // 计算一次策略的交叉熵，用于性能检测用途
-    auto entropy = -mean(sum(log_act_prob * mcts_probs, 1), kFloat);
+    auto entropy = -mean(sum(log_act_prob * mcts_probs, 1), kFloat32);
     return std::make_pair(loss, entropy);
 }
 
