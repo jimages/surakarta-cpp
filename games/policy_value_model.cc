@@ -36,7 +36,6 @@ std::pair<torch::Tensor, torch::Tensor> NetImpl::forward(torch::Tensor x)
     auto x_pol = torch::relu(pol_bat(pol_conv1->forward(x)));
     x_pol = x_pol.view({ -1, 256 * height * width });
     x_pol = torch::log_softmax(pol_fc1->forward(x_pol), 1);
-    std::cout << x_pol[0].exp_() << std::endl;
 
     // 价值网络
     auto x_val = torch::relu(val_conv1->forward(x));
