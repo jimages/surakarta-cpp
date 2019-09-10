@@ -123,7 +123,6 @@ void train_server()
             b = torch_deserialize(dataset[0]);
             p = torch_deserialize(dataset[1]);
             v = torch_deserialize(dataset[2]);
-            std::cout << b[0] << p[0] << v << std::endl;
 
             board = torch::cat({ b, board });
             mcts = torch::cat({ p, mcts });
