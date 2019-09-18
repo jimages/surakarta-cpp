@@ -44,7 +44,7 @@
 #ifdef NDEBUG
 #define SIMULATION 800
 #else
-#define SIMULATION 100
+#define SIMULATION 10
 #endif // NDEBUG
 
 //
