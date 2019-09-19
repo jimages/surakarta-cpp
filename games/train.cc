@@ -20,6 +20,7 @@
 #include <iostream>
 #include <iterator>
 #include <numeric>
+#include <omp.h>
 #include <random>
 #include <torch/torch.h>
 #include <tuple>
@@ -43,7 +44,6 @@
 #else
 #define EVO_BATCH 1
 #endif
-
 
 using MCTS::Node;
 using MCTS::run_mcts_distribute;
@@ -121,6 +121,8 @@ void train_server()
     // tag 1 stand for evaluation. tag 2 stand for train data
     reqs[0] = world.irecv(mpi::any_source, 1, state);
     reqs[1] = world.irecv(mpi::any_source, 2, dataset);
+    auto time = omp_get_wtime();
+    long long evoluation_n = 0;
     while (true) {
         boost::optional<mpi::status> status;
         if (status = reqs[0].test()) {
@@ -130,7 +132,6 @@ void train_server()
         }
 
         if (status = reqs[1].test()) {
-            evo_batch = 0;
             // get board, probability, value
             torch::Tensor b, p, v;
             b = torch_deserialize(dataset[0]);
@@ -200,12 +201,13 @@ void train_server()
                 d_trans_queue.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
                 ind++;
             }
-            evo_batch += EVO_BATCH;
-            if (evo_batch == 0) {
-                std::cout << evo_batch;
-                std::cout.flush();
-            } else {
+            evoluation_n += EVO_BATCH;
+            if (evoluation_n % 100 < EVO_BATCH) {
                 std::cout << "\r" << evo_batch;
+                std::cout << 100.0 / (omp_get_wtime() - time) << "/s\t"
+                          << "total:" << evoluation_n;
+                time = omp_get_wtime();
+                std::cout.flush();
                 std::cout.flush();
             }
         }
