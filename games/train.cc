@@ -29,9 +29,21 @@
 
 #define GAME 50000000
 #define GAME_LIMIT 300
+
+#ifdef NDEBUG
 #define SAMPLE_SIZE 4096
+#else
+#define SAMPLE_SIZE 1024
+#endif
+
 #define GAME_DATA_LIMIT 1000000
+
+#ifdef NDEBUG
+#define EVO_BATCH 4
+#else
 #define EVO_BATCH 1
+#endif
+
 
 using MCTS::Node;
 using MCTS::run_mcts_distribute;
@@ -77,6 +89,7 @@ void train_server()
     std::vector<mpi::request> d_trans_queue;
     std::cout << "total processes: " << size << std::endl;
     std::cout << "the simulation count:" << SIMULATION << std::endl;
+    std::cout << "evoluiton batch size:" << EVO_BATCH << std::endl;
 
     unsigned long batch = 1;
     unsigned long game = 1;
