@@ -185,6 +185,7 @@ void train_server()
             long ind = 0;
             for (auto i = source.begin(); i != source.end(); ++i) {
                 d_trans_queue.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
+                ind++;
             }
             evo_batch += EVO_BATCH;
             if (evo_batch == 0) {
