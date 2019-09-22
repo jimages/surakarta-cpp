@@ -86,19 +86,15 @@ void train_server()
 {
     mpi::communicator world;
     unsigned int size = world.size();
-    std::vector<mpi::request> d_trans_queue;
     std::cout << "total processes: " << size << std::endl;
     std::cout << "the simulation count:" << SIMULATION << std::endl;
     std::cout << "evoluiton batch size:" << EVO_BATCH << std::endl;
 
-    unsigned long batch = 1;
     unsigned long game = 1;
-    unsigned long long evo_batch = 0;
+    u_long batch = 0;
     torch::Tensor board = torch::empty({ 0 });
     torch::Tensor mcts = torch::empty({ 0 });
     torch::Tensor value = torch::empty({ 0 });
-
-    std::deque<std::pair<int, torch::Tensor>> deque;
 
     // load the pt if exists
     if (exists("board.pt"))
@@ -115,23 +111,17 @@ void train_server()
     if (exists("optimizer.pt"))
         torch::load(*(network.optimizer), "optimizer.pt");
 
-    std::string state;
     std::array<std::string, 3> dataset;
-    mpi::request reqs[2];
     // tag 1 stand for evaluation. tag 2 stand for train data
-    reqs[0] = world.irecv(mpi::any_source, 1, state);
-    reqs[1] = world.irecv(mpi::any_source, 2, dataset);
+    auto req = world.irecv(mpi::any_source, 2, dataset);
+    auto net_req = world.irecv(mpi::any_source, 3);
+
     auto time = omp_get_wtime();
     long long evoluation_n = 0;
     while (true) {
         boost::optional<mpi::status> status;
-        if (status = reqs[0].test()) {
 
-            deque.emplace_back(status->source(), torch_deserialize(state));
-            reqs[0] = world.irecv(mpi::any_source, 1, state);
-        }
-
-        if (status = reqs[1].test()) {
+        if (status = req.test()) {
             // get board, probability, value
             torch::Tensor b, p, v;
             b = torch_deserialize(dataset[0]);
@@ -177,47 +167,77 @@ void train_server()
                 torch::save(*(network.optimizer), "optimizer.pt");
             }
             ++game;
-            reqs[1] = world.irecv(mpi::any_source, 2, dataset);
+            req = world.irecv(mpi::any_source, 2, dataset);
         }
-
-        // evoluate the state
-        if (deque.size() >= EVO_BATCH) {
-            std::vector<int> source;
-            torch::Tensor states = torch::empty({ 0 });
-
-            while (!deque.empty()) {
-                auto d = deque.front();
-                source.emplace_back(d.first);
-                states = at::cat({ states, d.second });
-                deque.pop_front();
-            }
-
-            torch::Tensor policy_logit, value;
-            std::tie(policy_logit, value) = network.policy_value(states);
-
-            assert(policy_logit.size(0) == static_cast<long long>(source.size()));
-            long ind = 0;
-            for (auto i = source.begin(); i != source.end(); ++i) {
-                d_trans_queue.push_back(world.isend(*i, 1, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
-                ind++;
-            }
-            evoluation_n += EVO_BATCH;
-            if (evoluation_n % 100 < EVO_BATCH) {
-                std::cout << "\r" << evo_batch;
-                std::cout << 100.0 / (omp_get_wtime() - time) << "/s\t"
-                          << "total:" << evoluation_n;
-                time = omp_get_wtime();
-                std::cout.flush();
-                std::cout.flush();
-            }
+        if (status = net_req.test()) {
+            world.send(status->source(), 3, model_serialize(network));
+            net_req = world.irecv(mpi::any_source, 3);
         }
-        // test all the requests
-        for (auto req = d_trans_queue.begin(); req != d_trans_queue.end();) {
-            auto status = req->test();
-            if (status) {
-                req = d_trans_queue.erase(req);
-            } else {
-                ++req;
+    }
+}
+void evoluation_server()
+{
+    mpi::communicator world;
+
+    PolicyValueNet net;
+    std::string model_buffer;
+    std::string state_buffer;
+    auto req = world.irecv(mpi::any_source, 3, state_buffer);
+    boost::optional<mpi::status> status;
+
+    std::deque<std::pair<int, torch::Tensor>> evoluation_deque;
+    std::vector<mpi::request> d_trans_queue;
+    double_t time;
+
+    while (true) {
+        u_long eva_count = 0;
+        // fetch the latest model.
+        world.send(0, 3);
+        world.recv(0, 3, model_buffer);
+        model_deserialize(net, model_buffer);
+
+        while (eva_count <= 10000) {
+            if (status = req.test()) {
+                evoluation_deque.emplace_back(status->source(), torch_deserialize(state_buffer));
+                req = world.irecv(mpi::any_source, 3, state_buffer);
+            }
+            // evoluate the state
+            if (evoluation_deque.size() >= EVO_BATCH) {
+                std::vector<int> source;
+                torch::Tensor states = torch::empty({ 0 });
+
+                while (!evoluation_deque.empty()) {
+                    auto d = evoluation_deque.front();
+                    source.emplace_back(d.first);
+                    states = at::cat({ states, d.second });
+                    evoluation_deque.pop_front();
+                }
+
+                torch::Tensor policy_logit, value;
+                std::tie(policy_logit, value) = net.policy_value(states);
+
+                assert(policy_logit.size(0) == static_cast<long long>(source.size()));
+                long ind = 0;
+                for (auto i = source.begin(); i != source.end(); ++i) {
+                    d_trans_queue.push_back(world.isend(*i, 4, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
+                    ind++;
+                }
+                eva_count += EVO_BATCH;
+                if (eva_count % 1000 < EVO_BATCH) {
+                    std::cout << "\r";
+                    std::cout << 1000.0 / (omp_get_wtime() - time) << "/s    ";
+                    time = omp_get_wtime();
+                    std::cout.flush();
+                }
+            }
+            // test all the requests
+            for (auto req = d_trans_queue.begin(); req != d_trans_queue.end();) {
+                auto status = req->test();
+                if (status) {
+                    req = d_trans_queue.erase(req);
+                } else {
+                    ++req;
+                }
             }
         }
     }
@@ -274,6 +294,8 @@ int main(int argc, char* argv[])
 
     if (rank == 0) {
         train_server();
+    } else if (rank <= 4) {
+        evoluation_server();
     } else {
         worker();
     }

@@ -173,8 +173,8 @@ inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const tor
 {
     std::string str;
     std::pair<std::string, std::string> data;
-    world.send(0, 1, torch_serialize(state));
-    world.recv(0, 1, data);
+    world.send(mpi::any_source, 3, torch_serialize(state));
+    world.recv(mpi::any_source, 4, data);
 
     return { torch_deserialize(data.first).unsqueeze(0).exp(), torch_deserialize(data.second).unsqueeze(0) };
 }
