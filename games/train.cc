@@ -40,7 +40,7 @@
 #define GAME_DATA_LIMIT 1000000
 
 #ifdef NDEBUG
-#define EVO_BATCH 4
+#define EVO_BATCH 5
 #else
 #define EVO_BATCH 1
 #endif
