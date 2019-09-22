@@ -26,22 +26,24 @@ struct NetImpl : torch::nn::Module {
 
     // 公共网络
     torch::nn::Conv2d conv1 { nullptr };
-    torch::nn::Conv2d conv2 { nullptr };
-    torch::nn::Conv2d conv3 { nullptr };
-    torch::nn::Conv2d conv4 { nullptr };
-
     torch::nn::BatchNorm bat1 { nullptr };
+    torch::nn::Conv2d conv2 { nullptr };
     torch::nn::BatchNorm bat2 { nullptr };
+    torch::nn::Conv2d conv3 { nullptr };
     torch::nn::BatchNorm bat3 { nullptr };
+    torch::nn::Conv2d conv4 { nullptr };
+    torch::nn::BatchNorm bat4 { nullptr };
 
     // 策略网络
     torch::nn::Conv2d pol_conv1 { nullptr };
+    torch::nn::BatchNorm pol_bat1 { nullptr };
     torch::nn::Linear pol_fc1 { nullptr };
-    torch::nn::BatchNorm pol_bat { nullptr };
 
     // 价值网络
     torch::nn::Conv2d val_conv1 { nullptr };
+    torch::nn::BatchNorm val_bat1 { nullptr };
     torch::nn::Linear val_fc1 { nullptr };
+    torch::nn::Linear val_fc2 { nullptr };
 };
 
 TORCH_MODULE(Net);
