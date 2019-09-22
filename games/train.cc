@@ -204,10 +204,9 @@ void train_server()
             evoluation_n += EVO_BATCH;
             if (evoluation_n % 100 < EVO_BATCH) {
                 std::cout << "\r" << evo_batch;
-                std::cout << 100.0 / (omp_get_wtime() - time) << "/s\t"
+                std::cout << 100.0 / (omp_get_wtime() - time) << "/s    "
                           << "total:" << evoluation_n;
                 time = omp_get_wtime();
-                std::cout.flush();
                 std::cout.flush();
             }
         }
