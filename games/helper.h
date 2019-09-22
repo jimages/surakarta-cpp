@@ -19,21 +19,6 @@ std::string torch_serialize(const T& tensor)
     torch::save(tensor, stream);
     return stream.str();
 }
-template <typename T>
-std::string model_serialize(const T& tensor)
-{
-    std::stringstream stream;
-    torch::save(tensor, stream);
-    return stream.str();
-}
-template <typename T>
-inline T model_deserialize(T model, const std::string& str)
-{
-    std::stringstream stream(str);
-    torch::load(model, stream);
-    return model;
-}
-
 inline torch::Tensor torch_deserialize(const std::string& str)
 {
     std::stringstream stream(str);

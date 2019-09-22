@@ -55,10 +55,10 @@ PolicyValueNet::PolicyValueNet()
     torch::manual_seed(42);
 
     if (torch::cuda::is_available()) {
-        std::cout << "CUDA available! Training on GPU." << std::endl;
+        std::cout << "CUDA available! work on GPU." << std::endl;
         device_type = torch::kCUDA;
     } else {
-        std::cout << "Training on CPU" << std::endl;
+        std::cout << "work on CPU" << std::endl;
         device_type = torch::kCPU;
     }
 
@@ -131,4 +131,16 @@ void PolicyValueNet::save_model(std::string model_file)
 void PolicyValueNet::load_model(std::string model_file)
 {
     torch::load(model, model_file);
+}
+
+std::string PolicyValueNet::serialize() const
+{
+    std::stringstream stream;
+    torch::save(model, stream);
+    return stream.str();
+}
+void PolicyValueNet::deserialize(std::string in)
+{
+    std::stringstream stream(in);
+    torch::load(model, stream);
 }

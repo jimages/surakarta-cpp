@@ -33,11 +33,9 @@
 #include <torch/torch.h>
 #include <vector>
 
+#include "constant.h"
 #include "helper.h"
 #include "policy_value_model.h"
-#ifdef USE_OPENMP
-#include <omp.h>
-#endif
 
 #define PB_C_BASE 19652.0f
 #define PB_C_INIT 1.25f
@@ -173,8 +171,9 @@ inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const tor
 {
     std::string str;
     std::pair<std::string, std::string> data;
-    world.send(mpi::any_source, 3, torch_serialize(state));
-    world.recv(mpi::any_source, 4, data);
+    int rank = world.rank();
+    world.send(rank % (EVA_SERVER_NUM - 1) + 1, 3, torch_serialize(state));
+    world.recv(rank % (EVA_SERVER_NUM - 1) + 1, 4, data);
 
     return { torch_deserialize(data.first).unsqueeze(0).exp(), torch_deserialize(data.second).unsqueeze(0) };
 }

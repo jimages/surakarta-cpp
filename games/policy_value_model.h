@@ -25,25 +25,25 @@ struct NetImpl : torch::nn::Module {
      */
 
     // 公共网络
-    torch::nn::Conv2d conv1 { nullptr };
-    torch::nn::BatchNorm bat1 { nullptr };
-    torch::nn::Conv2d conv2 { nullptr };
-    torch::nn::BatchNorm bat2 { nullptr };
-    torch::nn::Conv2d conv3 { nullptr };
-    torch::nn::BatchNorm bat3 { nullptr };
-    torch::nn::Conv2d conv4 { nullptr };
-    torch::nn::BatchNorm bat4 { nullptr };
+    torch::nn::Conv2d conv1{ nullptr };
+    torch::nn::BatchNorm bat1{ nullptr };
+    torch::nn::Conv2d conv2{ nullptr };
+    torch::nn::BatchNorm bat2{ nullptr };
+    torch::nn::Conv2d conv3{ nullptr };
+    torch::nn::BatchNorm bat3{ nullptr };
+    torch::nn::Conv2d conv4{ nullptr };
+    torch::nn::BatchNorm bat4{ nullptr };
 
     // 策略网络
-    torch::nn::Conv2d pol_conv1 { nullptr };
-    torch::nn::BatchNorm pol_bat1 { nullptr };
-    torch::nn::Linear pol_fc1 { nullptr };
+    torch::nn::Conv2d pol_conv1{ nullptr };
+    torch::nn::BatchNorm pol_bat1{ nullptr };
+    torch::nn::Linear pol_fc1{ nullptr };
 
     // 价值网络
-    torch::nn::Conv2d val_conv1 { nullptr };
-    torch::nn::BatchNorm val_bat1 { nullptr };
-    torch::nn::Linear val_fc1 { nullptr };
-    torch::nn::Linear val_fc2 { nullptr };
+    torch::nn::Conv2d val_conv1{ nullptr };
+    torch::nn::BatchNorm val_bat1{ nullptr };
+    torch::nn::Linear val_fc1{ nullptr };
+    torch::nn::Linear val_fc2{ nullptr };
 };
 
 TORCH_MODULE(Net);
@@ -52,11 +52,13 @@ struct PolicyValueNet {
     PolicyValueNet();
     ~PolicyValueNet();
     torch::optim::Optimizer* optimizer = nullptr;
-    torch::Device device { torch::kCPU };
+    torch::Device device{ torch::kCPU };
     Net model;
     std::pair<torch::Tensor, torch::Tensor> policy_value(torch::Tensor);
     std::pair<torch::Tensor, torch::Tensor> train_step(torch::Tensor states_batch, torch::Tensor mcts_probs, torch::Tensor winner_batch);
     void save_model(std::string model_file);
     void load_model(std::string model_file);
+    std::string serialize() const;
+    void deserialize(std::string in);
 };
 #endif // POLICY_VALUE_MODEL_H

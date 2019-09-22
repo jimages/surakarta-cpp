@@ -1,6 +1,7 @@
 /*
  * 自对弈训练程序
  */
+#include "constant.h"
 #include "helper.h"
 #include "mcts.h"
 #include "policy_value_model.h"
@@ -17,33 +18,18 @@
 #include <cerrno>
 #include <cstdlib>
 #include <deque>
+#include <functional>
 #include <iostream>
 #include <iterator>
 #include <numeric>
 #include <omp.h>
 #include <random>
+#include <string>
 #include <torch/torch.h>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
-#define GAME 50000000
-#define GAME_LIMIT 300
-
-#ifdef NDEBUG
-#define SAMPLE_SIZE 4096
-#else
-#define SAMPLE_SIZE 1024
-#endif
-
-#define GAME_DATA_LIMIT 1000000
-
-#ifdef NDEBUG
-#define EVO_BATCH 5
-#else
-#define EVO_BATCH 1
-#endif
 
 using MCTS::Node;
 using MCTS::run_mcts_distribute;
@@ -85,6 +71,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> sample(const torch::Tens
 void train_server()
 {
     mpi::communicator world;
+    mpi::communicator server = world.split(1);
     unsigned int size = world.size();
     std::cout << "total processes: " << size << std::endl;
     std::cout << "the simulation count:" << SIMULATION << std::endl;
@@ -95,6 +82,10 @@ void train_server()
     torch::Tensor board = torch::empty({ 0 });
     torch::Tensor mcts = torch::empty({ 0 });
     torch::Tensor value = torch::empty({ 0 });
+    u_long totoal_evaluation = 0;
+    double time = omp_get_wtime();
+    double last_sync_model;
+    std::string model_buf;
 
     // load the pt if exists
     if (exists("board.pt"))
@@ -111,13 +102,17 @@ void train_server()
     if (exists("optimizer.pt"))
         torch::load(*(network.optimizer), "optimizer.pt");
 
+    // brocast the model
+    std::cout << "Broadcast the network." << std::endl;
+    model_buf = network.serialize();
+    mpi::broadcast(server, model_buf, 0);
+    server.barrier();
+    last_sync_model = omp_get_wtime();
+
     std::array<std::string, 3> dataset;
     // tag 1 stand for evaluation. tag 2 stand for train data
     auto req = world.irecv(mpi::any_source, 2, dataset);
-    auto net_req = world.irecv(mpi::any_source, 3);
 
-    auto time = omp_get_wtime();
-    long long evoluation_n = 0;
     while (true) {
         boost::optional<mpi::status> status;
 
@@ -169,76 +164,99 @@ void train_server()
             ++game;
             req = world.irecv(mpi::any_source, 2, dataset);
         }
-        if (status = net_req.test()) {
-            world.send(status->source(), 3, model_serialize(network));
-            net_req = world.irecv(mpi::any_source, 3);
+        if ((omp_get_wtime() - time) > TIME_LIMIT) {
+            u_long total;
+            mpi::reduce(server, totoal_evaluation, total, std::plus<u_long>(), 0);
+            std::cout << "\r"
+                      << static_cast<double>(total) / (omp_get_wtime() - time)
+                      << "/s";
+            std::cout.flush();
+            time = omp_get_wtime();
+            totoal_evaluation = 0;
+        }
+        if ((omp_get_wtime() - last_sync_model) > 60) {
+            model_buf = network.serialize();
+            mpi::broadcast(server, model_buf, 0);
+            last_sync_model = omp_get_wtime();
+            std::cout << std::endl
+                      << "Sync the lastest network." << std::endl;
         }
     }
 }
 void evoluation_server()
 {
     mpi::communicator world;
+    mpi::communicator server = world.split(1);
 
-    PolicyValueNet net;
     std::string model_buffer;
     std::string state_buffer;
+
     auto req = world.irecv(mpi::any_source, 3, state_buffer);
     boost::optional<mpi::status> status;
 
     std::deque<std::pair<int, torch::Tensor>> evoluation_deque;
     std::vector<mpi::request> d_trans_queue;
-    double_t time;
+
+    PolicyValueNet net;
+
+    // Init the model.
+    double time = omp_get_wtime();
+    double last_sync_model;
+
+    mpi::broadcast(server, model_buffer, 0);
+    net.deserialize(model_buffer);
+    server.barrier();
+    last_sync_model = omp_get_wtime();
+
+    u_long totoal_evaluation = 0;
 
     while (true) {
-        u_long eva_count = 0;
-        // fetch the latest model.
-        world.send(0, 3);
-        world.recv(0, 3, model_buffer);
-        model_deserialize(net, model_buffer);
+        if (status = req.test()) {
+            evoluation_deque.emplace_back(status->source(), torch_deserialize(state_buffer));
+            req = world.irecv(mpi::any_source, 3, state_buffer);
+        }
+        // evoluate the state
+        if (evoluation_deque.size() >= EVO_BATCH) {
+            std::vector<int> source;
+            torch::Tensor states = torch::empty({ 0 });
 
-        while (eva_count <= 10000) {
-            if (status = req.test()) {
-                evoluation_deque.emplace_back(status->source(), torch_deserialize(state_buffer));
-                req = world.irecv(mpi::any_source, 3, state_buffer);
+            while (!evoluation_deque.empty()) {
+                auto d = evoluation_deque.front();
+                source.emplace_back(d.first);
+                states = at::cat({ states, d.second });
+                evoluation_deque.pop_front();
             }
-            // evoluate the state
-            if (evoluation_deque.size() >= EVO_BATCH) {
-                std::vector<int> source;
-                torch::Tensor states = torch::empty({ 0 });
 
-                while (!evoluation_deque.empty()) {
-                    auto d = evoluation_deque.front();
-                    source.emplace_back(d.first);
-                    states = at::cat({ states, d.second });
-                    evoluation_deque.pop_front();
-                }
+            torch::Tensor policy_logit, value;
+            std::tie(policy_logit, value) = net.policy_value(states);
 
-                torch::Tensor policy_logit, value;
-                std::tie(policy_logit, value) = net.policy_value(states);
-
-                assert(policy_logit.size(0) == static_cast<long long>(source.size()));
-                long ind = 0;
-                for (auto i = source.begin(); i != source.end(); ++i) {
-                    d_trans_queue.push_back(world.isend(*i, 4, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
-                    ind++;
-                }
-                eva_count += EVO_BATCH;
-                if (eva_count % 1000 < EVO_BATCH) {
-                    std::cout << "\r";
-                    std::cout << 1000.0 / (omp_get_wtime() - time) << "/s    ";
-                    time = omp_get_wtime();
-                    std::cout.flush();
-                }
+            assert(policy_logit.size(0) == static_cast<long long>(source.size()));
+            long ind = 0;
+            for (auto i = source.begin(); i != source.end(); ++i) {
+                d_trans_queue.push_back(world.isend(*i, 4, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
+                ind++;
             }
-            // test all the requests
-            for (auto req = d_trans_queue.begin(); req != d_trans_queue.end();) {
-                auto status = req->test();
-                if (status) {
-                    req = d_trans_queue.erase(req);
-                } else {
-                    ++req;
-                }
+            totoal_evaluation += EVO_BATCH;
+        }
+        if ((omp_get_wtime() - time) > TIME_LIMIT) {
+            mpi::reduce(server, totoal_evaluation, std::plus<u_long>(), 0);
+            totoal_evaluation = 0;
+            time = omp_get_wtime();
+        }
+
+        // test all the requests
+        for (auto req = d_trans_queue.begin(); req != d_trans_queue.end();) {
+            auto status = req->test();
+            if (status) {
+                req = d_trans_queue.erase(req);
+            } else {
+                ++req;
             }
+        }
+        if ((omp_get_wtime() - last_sync_model) > 60) {
+            mpi::broadcast(server, model_buffer, 0);
+            net.deserialize(model_buffer);
+            last_sync_model = omp_get_wtime();
         }
     }
 }
@@ -246,6 +264,7 @@ void evoluation_server()
 void worker()
 {
     mpi::communicator world;
+    mpi::communicator client = world.split(2);
     std::vector<mpi::request> d_trans_queue;
     while (true) {
         torch::Tensor b = torch::zeros({ 0 });
@@ -294,7 +313,7 @@ int main(int argc, char* argv[])
 
     if (rank == 0) {
         train_server();
-    } else if (rank <= 4) {
+    } else if (rank <= EVA_SERVER_NUM) {
         evoluation_server();
     } else {
         worker();
