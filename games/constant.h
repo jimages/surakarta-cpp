@@ -19,12 +19,16 @@
 
 // evaluation的batch数量
 #ifdef NDEBUG
-#define EVO_BATCH 5
+#define EVO_BATCH 3
 #else
-#define EVO_BATCH 1
+#define EVO_BATCH 3
 #endif
 
+#ifdef NDEBUG
 #define EVA_SERVER_NUM 6
+#else
+#define EVA_SERVER_NUM 2
+#endif
 
 // 计算推断速度的时间阈值
 #define TIME_LIMIT 5

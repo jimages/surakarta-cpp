@@ -25,6 +25,8 @@
 #include <omp.h>
 #include <random>
 #include <string>
+#include <torch/serialize/input-archive.h>
+#include <torch/serialize/output-archive.h>
 #include <torch/torch.h>
 #include <tuple>
 #include <unordered_map>
@@ -86,6 +88,7 @@ void train_server()
     double time = omp_get_wtime();
     double last_sync_model;
     std::string model_buf;
+    bool has_updated = false;
 
     // load the pt if exists
     if (exists("board.pt"))
@@ -104,7 +107,10 @@ void train_server()
 
     // brocast the model
     std::cout << "Broadcast the network." << std::endl;
+    network.model->to(torch::kCPU);
     model_buf = network.serialize();
+    network.model->to(torch::kCUDA);
+
     mpi::broadcast(server, model_buf, 0);
     server.barrier();
     last_sync_model = omp_get_wtime();
@@ -150,6 +156,7 @@ void train_server()
                           << " entropy: " << entropy.item<float>()
                           << " train dataset size: " << board.size(0)
                           << std::endl;
+                has_updated = true;
             }
 
             // saving the model
@@ -175,11 +182,22 @@ void train_server()
             totoal_evaluation = 0;
         }
         if ((omp_get_wtime() - last_sync_model) > 60) {
-            model_buf = network.serialize();
-            mpi::broadcast(server, model_buf, 0);
-            last_sync_model = omp_get_wtime();
-            std::cout << std::endl
-                      << "Sync the lastest network." << std::endl;
+            if (has_updated) {
+                network.model->to(torch::kCPU);
+                model_buf = network.serialize();
+                network.model->to(torch::kCUDA);
+                mpi::broadcast(server, model_buf, 0);
+                last_sync_model = omp_get_wtime();
+                has_updated = false;
+                std::cout << std::endl
+                          << "Sync the lastest network." << std::endl;
+            } else {
+                model_buf.clear();
+                mpi::broadcast(server, model_buf, 0);
+                last_sync_model = omp_get_wtime();
+                std::cout << std::endl
+                          << "No update so skip the fetching." << std::endl;
+            }
         }
     }
 }
@@ -192,6 +210,7 @@ void evoluation_server()
     std::string state_buffer;
 
     auto req = world.irecv(mpi::any_source, 3, state_buffer);
+    std::cout << "evaluation proecess rank:" << world.rank() << std::endl;
     boost::optional<mpi::status> status;
 
     std::deque<std::pair<int, torch::Tensor>> evoluation_deque;
@@ -256,7 +275,9 @@ void evoluation_server()
         }
         if ((omp_get_wtime() - last_sync_model) > 60) {
             mpi::broadcast(server, model_buffer, 0);
-            net.deserialize(model_buffer);
+            if (!model_buffer.empty()) {
+                net.deserialize(model_buffer);
+            }
             last_sync_model = omp_get_wtime();
         }
     }

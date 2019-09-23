@@ -51,8 +51,8 @@ std::pair<torch::Tensor, torch::Tensor> NetImpl::forward(torch::Tensor x)
 PolicyValueNet::PolicyValueNet()
 {
     // 宇宙的答案
-    torch::DeviceType device_type;
     torch::manual_seed(42);
+    torch::DeviceType device_type;
 
     if (torch::cuda::is_available()) {
         std::cout << "CUDA available! work on GPU." << std::endl;
@@ -62,7 +62,7 @@ PolicyValueNet::PolicyValueNet()
         device_type = torch::kCPU;
     }
 
-    device = device_type;
+    device = torch::Device(device_type);
 
     model->to(device);
 
@@ -71,15 +71,13 @@ PolicyValueNet::PolicyValueNet()
 PolicyValueNet::PolicyValueNet(int device_ind)
 {
     // 宇宙的答案
-    torch::DeviceType device_type;
     torch::manual_seed(42);
 
     assert(torch::cuda::is_available());
+    assert(device_ind < torch::cuda::device_count());
     std::cout << "CUDA available! work on GPU." << std::endl;
-    device_type = torch::kCUDA;
 
-    device = device_type;
-    device = device.set_index(device_num);
+    device = torch::Device(torch::kCUDA, device_ind);
 
     model->to(device);
 
@@ -115,8 +113,7 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
 {
     using namespace torch;
     TensorOptions option;
-    option = option.device(device);
-    option = option.dtype(kFloat32);
+    option = option.device(this->device).dtype(kFloat32).requires_grad(true);
     states_batch = states_batch.to(option);
     mcts_probs = mcts_probs.to(option);
     winner_batch = winner_batch.to(option);
@@ -160,4 +157,5 @@ void PolicyValueNet::deserialize(std::string in)
 {
     std::stringstream stream(in);
     torch::load(model, stream);
+    model->to(device);
 }
