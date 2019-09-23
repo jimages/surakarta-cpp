@@ -2,6 +2,64 @@
 #define POLICY_VALUE_MODEL_H
 #include <torch/torch.h>
 #include <utility>
+inline torch::nn::Conv2dOptions conv_options(int64_t in_planes, int64_t out_planes, int64_t kerner_size,
+    int64_t stride = 1, int64_t padding = 0, bool with_bias = false)
+{
+    torch::nn::Conv2dOptions conv_options = torch::nn::Conv2dOptions(in_planes, out_planes, kerner_size);
+    conv_options.stride_ = stride;
+    conv_options.padding_ = padding;
+    conv_options.with_bias_ = with_bias;
+    return conv_options;
+}
+// 残差网络
+struct BasicBlock : torch::nn::Module {
+
+    int64_t stride;
+    torch::nn::Conv2d conv1;
+    torch::nn::BatchNorm bn1;
+    torch::nn::Conv2d conv2;
+    torch::nn::BatchNorm bn2;
+    torch::nn::Sequential downsample;
+
+    BasicBlock(int64_t inplanes, int64_t planes, int64_t stride_ = 1,
+        torch::nn::Sequential downsample_ = torch::nn::Sequential())
+        : conv1(conv_options(inplanes, planes, 3, stride_, 1))
+        , bn1(planes)
+        , conv2(conv_options(planes, planes, 3, 1, 1))
+        , bn2(planes)
+        , downsample(downsample_)
+    {
+        register_module("conv1", conv1);
+        register_module("bn1", bn1);
+        register_module("conv2", conv2);
+        register_module("bn2", bn2);
+        stride = stride_;
+        if (!downsample->is_empty()) {
+            register_module("downsample", downsample);
+        }
+    }
+
+    torch::Tensor forward(torch::Tensor x)
+    {
+        at::Tensor residual(x.clone());
+
+        x = conv1->forward(x);
+        x = bn1->forward(x);
+        x = torch::relu(x);
+
+        x = conv2->forward(x);
+        x = bn2->forward(x);
+
+        if (!downsample->is_empty()) {
+            residual = downsample->forward(residual);
+        }
+
+        x += residual;
+        x = torch::relu(x);
+
+        return x;
+    }
+};
 
 struct NetImpl : torch::nn::Module {
     static const int_fast32_t width = 6;
@@ -25,25 +83,20 @@ struct NetImpl : torch::nn::Module {
      */
 
     // 公共网络
-    torch::nn::Conv2d conv1{ nullptr };
-    torch::nn::BatchNorm bat1{ nullptr };
-    torch::nn::Conv2d conv2{ nullptr };
-    torch::nn::BatchNorm bat2{ nullptr };
-    torch::nn::Conv2d conv3{ nullptr };
-    torch::nn::BatchNorm bat3{ nullptr };
-    torch::nn::Conv2d conv4{ nullptr };
-    torch::nn::BatchNorm bat4{ nullptr };
+    torch::nn::BatchNorm bat1 { nullptr };
+    torch::nn::Conv2d conv1 { nullptr };
+    torch::nn::Sequential res_layers { nullptr };
 
     // 策略网络
-    torch::nn::Conv2d pol_conv1{ nullptr };
-    torch::nn::BatchNorm pol_bat1{ nullptr };
-    torch::nn::Linear pol_fc1{ nullptr };
+    torch::nn::Conv2d pol_conv1 { nullptr };
+    torch::nn::BatchNorm pol_bat1 { nullptr };
+    torch::nn::Linear pol_fc1 { nullptr };
 
     // 价值网络
-    torch::nn::Conv2d val_conv1{ nullptr };
-    torch::nn::BatchNorm val_bat1{ nullptr };
-    torch::nn::Linear val_fc1{ nullptr };
-    torch::nn::Linear val_fc2{ nullptr };
+    torch::nn::Conv2d val_conv1 { nullptr };
+    torch::nn::BatchNorm val_bat1 { nullptr };
+    torch::nn::Linear val_fc1 { nullptr };
+    torch::nn::Linear val_fc2 { nullptr };
 };
 
 TORCH_MODULE(Net);
@@ -62,6 +115,6 @@ struct PolicyValueNet {
     void deserialize(std::string in);
 
 private:
-    torch::Device device{ torch::kCPU };
+    torch::Device device { torch::kCPU };
 };
 #endif // POLICY_VALUE_MODEL_H

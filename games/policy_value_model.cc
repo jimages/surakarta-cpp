@@ -7,12 +7,7 @@ using torch::nn::Conv2dOptions;
 NetImpl::NetImpl()
     : conv1(register_module("conv1", torch::nn::Conv2d(Conv2dOptions(9, 256, 3).padding(1))))
     , bat1(register_module("bat1", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
-    , conv2(register_module("conv2", torch::nn::Conv2d(Conv2dOptions(256, 256, 3).padding(1))))
-    , bat2(register_module("bat2", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
-    , conv3(register_module("conv3", torch::nn::Conv2d(Conv2dOptions(256, 256, 3).padding(1))))
-    , bat3(register_module("bat3", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
-    , conv4(register_module("conv4", torch::nn::Conv2d(Conv2dOptions(256, 256, 3).padding(1))))
-    , bat4(register_module("bat4", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
+    , res_layers(torch::nn::Sequential())
     // 策略网络
     , pol_conv1(register_module("pol_conv1", torch::nn::Conv2d(Conv2dOptions(256, 256, 1))))
     , pol_bat1(register_module("pol_bat1", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
@@ -25,15 +20,17 @@ NetImpl::NetImpl()
     , val_fc2(register_module("val_fc2", torch::nn::Linear(256, 1)))
 
 {
+    for (int i = 0; i <= 5; ++i) {
+        res_layers->push_back(BasicBlock(256, 256));
+    }
+    register_module("res_layers", res_layers);
 }
 
 std::pair<torch::Tensor, torch::Tensor> NetImpl::forward(torch::Tensor x)
 {
     // 公共的结构
     x = torch::relu(bat1->forward(conv1->forward(x)));
-    x = torch::relu(bat2->forward(conv2->forward(x)));
-    x = torch::relu(bat3->forward(conv3->forward(x)));
-    x = torch::relu(bat4->forward(conv4->forward(x)));
+    x = res_layers->forward(x);
 
     // 策略网络
     auto x_pol = torch::relu(pol_bat1->forward(pol_conv1->forward(x)));
