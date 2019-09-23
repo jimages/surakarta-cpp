@@ -197,7 +197,8 @@ void evoluation_server()
     std::deque<std::pair<int, torch::Tensor>> evoluation_deque;
     std::vector<mpi::request> d_trans_queue;
 
-    PolicyValueNet net;
+    int total_device = torch::cuda::device_count();
+    PolicyValueNet net(world.rank() % total_device);
 
     // Init the model.
     double time = omp_get_wtime();

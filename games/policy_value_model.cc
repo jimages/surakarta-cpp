@@ -68,6 +68,23 @@ PolicyValueNet::PolicyValueNet()
 
     optimizer = new torch::optim::Adam(model->parameters(), torch::optim::AdamOptions(1e-3).weight_decay(1e-4));
 }
+PolicyValueNet::PolicyValueNet(int device_ind)
+{
+    // 宇宙的答案
+    torch::DeviceType device_type;
+    torch::manual_seed(42);
+
+    assert(torch::cuda::is_available());
+    std::cout << "CUDA available! work on GPU." << std::endl;
+    device_type = torch::kCUDA;
+
+    device = device_type;
+    device = device.set_index(device_num);
+
+    model->to(device);
+
+    optimizer = new torch::optim::Adam(model->parameters(), torch::optim::AdamOptions(1e-3).weight_decay(1e-4));
+}
 
 PolicyValueNet::~PolicyValueNet()
 {
