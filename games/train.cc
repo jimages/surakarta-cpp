@@ -99,6 +99,7 @@ void train_server()
         torch::load(value, "value.pt");
 
     PolicyValueNet network;
+    std::cout << network.model << std::endl;
 
     if (exists("value_policy.pt"))
         network.load_model("value_policy.pt");
@@ -217,7 +218,7 @@ void evoluation_server()
     std::vector<mpi::request> d_trans_queue;
 
     int total_device = torch::cuda::device_count();
-    PolicyValueNet net(world.rank() % total_device);
+    PolicyValueNet net((world.rank() - 1) % total_device);
 
     // Init the model.
     double time = omp_get_wtime();

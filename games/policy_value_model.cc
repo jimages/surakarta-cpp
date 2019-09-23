@@ -4,6 +4,44 @@
 #include <utility>
 
 using torch::nn::Conv2dOptions;
+BasicBlockImpl::BasicBlockImpl(int64_t inplanes, int64_t planes, int64_t stride_,
+    torch::nn::Sequential downsample_)
+    : conv1(conv_options(inplanes, planes, 3, stride_, 1))
+    , bn1(planes)
+    , conv2(conv_options(planes, planes, 3, 1, 1))
+    , bn2(planes)
+    , downsample(downsample_)
+{
+    register_module("conv1", conv1);
+    register_module("bn1", bn1);
+    register_module("conv2", conv2);
+    register_module("bn2", bn2);
+    stride = stride_;
+    if (!downsample->is_empty()) {
+        register_module("downsample", downsample);
+    }
+}
+
+torch::Tensor BasicBlockImpl::forward(torch::Tensor x)
+{
+    at::Tensor residual(x.clone());
+
+    x = conv1->forward(x);
+    x = bn1->forward(x);
+    x = torch::relu(x);
+
+    x = conv2->forward(x);
+    x = bn2->forward(x);
+
+    if (!downsample->is_empty()) {
+        residual = downsample->forward(residual);
+    }
+
+    x += residual;
+    x = torch::relu(x);
+
+    return x;
+}
 NetImpl::NetImpl()
     : conv1(register_module("conv1", torch::nn::Conv2d(Conv2dOptions(9, 256, 3).padding(1))))
     , bat1(register_module("bat1", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
@@ -110,7 +148,7 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
 {
     using namespace torch;
     TensorOptions option;
-    option = option.device(this->device).dtype(kFloat32).requires_grad(true);
+    option = option.device(this->device).dtype(kFloat32);
     states_batch = states_batch.to(option);
     mcts_probs = mcts_probs.to(option);
     winner_batch = winner_batch.to(option);
