@@ -47,14 +47,14 @@ NetImpl::NetImpl()
     , bat1(register_module("bat1", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
     , res_layers(torch::nn::Sequential())
     // 策略网络
-    , pol_conv1(register_module("pol_conv1", torch::nn::Conv2d(Conv2dOptions(256, 256, 1))))
+    , pol_conv1(register_module("pol_conv1", torch::nn::Conv2d(Conv2dOptions(256, 4, 1))))
     , pol_bat1(register_module("pol_bat1", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
-    , pol_fc1(register_module("pol_fc1", torch::nn::Linear(256 * width * height, width * height * width * height)))
+    , pol_fc1(register_module("pol_fc1", torch::nn::Linear(4 * width * height, width * height * width * height)))
 
     // 价值网络
-    , val_conv1(register_module("val_conv1", torch::nn::Conv2d(Conv2dOptions(256, 9, 1))))
-    , val_bat1(register_module("val_bat1", torch::nn::BatchNorm(torch::nn::BatchNormOptions(9))))
-    , val_fc1(register_module("val_fc1", torch::nn::Linear(9 * width * height, 256)))
+    , val_conv1(register_module("val_conv1", torch::nn::Conv2d(Conv2dOptions(256, 2, 1))))
+    , val_bat1(register_module("val_bat1", torch::nn::BatchNorm(torch::nn::BatchNormOptions(2))))
+    , val_fc1(register_module("val_fc1", torch::nn::Linear(2 * width * height, 256)))
     , val_fc2(register_module("val_fc2", torch::nn::Linear(256, 1)))
 
 {
