@@ -181,23 +181,23 @@ void train_server()
             std::cout.flush();
             time = omp_get_wtime();
             totoal_evaluation = 0;
-        }
-        if ((omp_get_wtime() - last_sync_model) > 60) {
-            if (has_updated) {
-                network.model->to(torch::kCPU);
-                model_buf = network.serialize();
-                network.model->to(torch::kCUDA);
-                mpi::broadcast(server, model_buf, 0);
-                last_sync_model = omp_get_wtime();
-                has_updated = false;
-                std::cout << std::endl
-                          << "Sync the lastest network." << std::endl;
-            } else {
-                model_buf.clear();
-                mpi::broadcast(server, model_buf, 0);
-                last_sync_model = omp_get_wtime();
-                std::cout << std::endl
-                          << "No update so skip the fetching." << std::endl;
+            if ((omp_get_wtime() - last_sync_model) > 60) {
+                if (has_updated) {
+                    network.model->to(torch::kCPU);
+                    model_buf = network.serialize();
+                    network.model->to(torch::kCUDA);
+                    mpi::broadcast(server, model_buf, 0);
+                    last_sync_model = omp_get_wtime();
+                    has_updated = false;
+                    std::cout << std::endl
+                              << "Sync the lastest network." << std::endl;
+                } else {
+                    model_buf.clear();
+                    mpi::broadcast(server, model_buf, 0);
+                    last_sync_model = omp_get_wtime();
+                    std::cout << std::endl
+                              << "No update so skip the fetching." << std::endl;
+                }
             }
         }
     }
@@ -263,6 +263,13 @@ void evoluation_server()
             mpi::reduce(server, totoal_evaluation, std::plus<u_long>(), 0);
             totoal_evaluation = 0;
             time = omp_get_wtime();
+            if ((omp_get_wtime() - last_sync_model) > 60) {
+                mpi::broadcast(server, model_buffer, 0);
+                if (!model_buffer.empty()) {
+                    net.deserialize(model_buffer);
+                }
+                last_sync_model = omp_get_wtime();
+            }
         }
 
         // test all the requests
@@ -273,13 +280,6 @@ void evoluation_server()
             } else {
                 ++req;
             }
-        }
-        if ((omp_get_wtime() - last_sync_model) > 60) {
-            mpi::broadcast(server, model_buffer, 0);
-            if (!model_buffer.empty()) {
-                net.deserialize(model_buffer);
-            }
-            last_sync_model = omp_get_wtime();
         }
     }
 }

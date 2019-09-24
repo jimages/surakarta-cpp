@@ -110,9 +110,10 @@ PolicyValueNet::PolicyValueNet(int device_ind)
 
     assert(torch::cuda::is_available());
     assert(device_ind < torch::cuda::device_count());
-    std::cout << "CUDA available! work on GPU." << std::endl;
-
-    device = torch::Device(torch::kCUDA, device_ind);
+    if (torch::cuda::is_available()) {
+        std::cout << "CUDA available! work on GPU." << std::endl;
+        device = torch::Device(torch::kCUDA, device_ind);
+    }
 
     model->to(device);
 

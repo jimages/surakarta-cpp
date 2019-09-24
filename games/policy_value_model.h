@@ -50,20 +50,20 @@ struct NetImpl : torch::nn::Module {
      */
 
     // 公共网络
-    torch::nn::BatchNorm bat1{ nullptr };
-    torch::nn::Conv2d conv1{ nullptr };
-    torch::nn::Sequential res_layers{ nullptr };
+    torch::nn::Conv2d conv1 { nullptr };
+    torch::nn::BatchNorm bat1 { nullptr };
+    torch::nn::Sequential res_layers { nullptr };
 
     // 策略网络
-    torch::nn::Conv2d pol_conv1{ nullptr };
-    torch::nn::BatchNorm pol_bat1{ nullptr };
-    torch::nn::Linear pol_fc1{ nullptr };
+    torch::nn::Conv2d pol_conv1 { nullptr };
+    torch::nn::BatchNorm pol_bat1 { nullptr };
+    torch::nn::Linear pol_fc1 { nullptr };
 
     // 价值网络
-    torch::nn::Conv2d val_conv1{ nullptr };
-    torch::nn::BatchNorm val_bat1{ nullptr };
-    torch::nn::Linear val_fc1{ nullptr };
-    torch::nn::Linear val_fc2{ nullptr };
+    torch::nn::Conv2d val_conv1 { nullptr };
+    torch::nn::BatchNorm val_bat1 { nullptr };
+    torch::nn::Linear val_fc1 { nullptr };
+    torch::nn::Linear val_fc2 { nullptr };
 };
 
 TORCH_MODULE(Net);
@@ -82,6 +82,6 @@ struct PolicyValueNet {
     void deserialize(std::string in);
 
 private:
-    torch::Device device{ torch::kCPU };
+    torch::Device device { torch::kCPU };
 };
 #endif // POLICY_VALUE_MODEL_H

@@ -21,6 +21,9 @@ LIST(APPEND SEARCH_HEADERS /usr/local/include)
 LIST(APPEND SEARCH_HEADERS /usr/local/homebrew/include) # Mac OS X
 LIST(APPEND SEARCH_HEADERS /opt/local/include)
 LIST(APPEND SEARCH_HEADERS /usr/local/opt/llvm/lib)
+IF(${APPLE})
+    SET(Boost_NO_BOOST_CMAKE ON)
+ENDIF()
 
 ENABLE_TESTING()
 
