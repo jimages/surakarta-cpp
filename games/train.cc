@@ -187,9 +187,13 @@ void train_server()
             totoal_evaluation = 0;
             if ((omp_get_wtime() - last_sync_model) > 60) {
                 if (has_updated) {
-                    network.model->to(torch::kCPU);
+                    if (torch::cuda::is_available()) {
+                        network.model->to(torch::kCPU);
+                    }
                     model_buf = network.serialize();
-                    network.model->to(torch::kCUDA);
+                    if (torch::cuda::is_available()) {
+                        network.model->to(torch::kCUDA);
+                    }
                     mpi::broadcast(server, model_buf, 0);
                     last_sync_model = omp_get_wtime();
                     has_updated = false;
