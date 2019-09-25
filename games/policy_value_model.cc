@@ -108,8 +108,6 @@ PolicyValueNet::PolicyValueNet(int device_ind)
     // 宇宙的答案
     torch::manual_seed(42);
 
-    assert(torch::cuda::is_available());
-    assert(device_ind < torch::cuda::device_count());
     if (torch::cuda::is_available()) {
         std::cout << "CUDA available! work on GPU." << std::endl;
         device = torch::Device(torch::kCUDA, device_ind);

@@ -108,9 +108,13 @@ void train_server()
 
     // brocast the model
     std::cout << "Broadcast the network." << std::endl;
-    network.model->to(torch::kCPU);
+    if (torch::cuda::is_available()) {
+        network.model->to(torch::kCPU);
+    }
     model_buf = network.serialize();
-    network.model->to(torch::kCUDA);
+    if (torch::cuda::is_available()) {
+        network.model->to(torch::kCUDA);
+    }
 
     mpi::broadcast(server, model_buf, 0);
     server.barrier();
@@ -217,7 +221,12 @@ void evoluation_server()
     std::deque<std::pair<int, torch::Tensor>> evoluation_deque;
     std::vector<mpi::request> d_trans_queue;
 
+    // When run on cpu we should initizlize the model on cpu.
+    // So the we assign 1 to totoal_device to bypass the divide_by_zero errors.
     int total_device = torch::cuda::device_count();
+    if (!torch::cuda::is_available()) {
+        total_device = 1;
+    }
     PolicyValueNet net((world.rank() - 1) % total_device);
 
     // Init the model.
