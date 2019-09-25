@@ -175,7 +175,7 @@ inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const tor
     world.send(rank % (EVA_SERVER_NUM) + 1, 3, torch_serialize(state));
     world.recv(rank % (EVA_SERVER_NUM) + 1, 4, data);
 
-    return { torch_deserialize(data.first).unsqueeze(0).exp(), torch_deserialize(data.second).unsqueeze(0) };
+    return { torch_deserialize(data.first).unsqueeze(0), torch_deserialize(data.second).unsqueeze(0) };
 }
 
 template <typename State>

@@ -48,7 +48,7 @@ NetImpl::NetImpl()
     , res_layers(torch::nn::Sequential())
     // 策略网络
     , pol_conv1(register_module("pol_conv1", torch::nn::Conv2d(Conv2dOptions(256, 4, 1))))
-    , pol_bat1(register_module("pol_bat1", torch::nn::BatchNorm(torch::nn::BatchNormOptions(256))))
+    , pol_bat1(register_module("pol_bat1", torch::nn::BatchNorm(torch::nn::BatchNormOptions(4))))
     , pol_fc1(register_module("pol_fc1", torch::nn::Linear(4 * width * height, width * height * width * height)))
 
     // 价值网络
@@ -72,12 +72,12 @@ std::pair<torch::Tensor, torch::Tensor> NetImpl::forward(torch::Tensor x)
 
     // 策略网络
     auto x_pol = torch::relu(pol_bat1->forward(pol_conv1->forward(x)));
-    x_pol = x_pol.view({ -1, 256 * height * width });
-    x_pol = torch::log_softmax(pol_fc1->forward(x_pol), 1);
+    x_pol = x_pol.view({ -1, 4 * height * width });
+    x_pol = pol_fc1->forward(x_pol);
 
     // 价值网络
     auto x_val = torch::relu(val_bat1->forward(val_conv1->forward(x)));
-    x_val = torch::relu(val_fc1->forward(x_val.view({ -1, 9 * width * height })));
+    x_val = torch::relu(val_fc1->forward(x_val.view({ -1, 2 * width * height })));
     x_val = torch::tanh(val_fc2->forward(x_val));
 
     return { x_pol, x_val };
@@ -158,18 +158,18 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
 
     optimizer->zero_grad();
 
-    torch::Tensor log_act_prob, value;
-    std::tie(log_act_prob, value) = model->forward(states_batch);
+    torch::Tensor act_prob, value;
+    std::tie(act_prob, value) = model->forward(states_batch);
 
     auto value_loss = mse_loss(value.view({ -1 }), winner_batch);
-    auto prob_loss = -mean(sum(mcts_probs.exp() * log_act_prob, 1), kFloat32);
+    auto prob_loss = -mean(sum(mcts_probs * torch::log_softmax(act_prob, 1), 1), kFloat32);
     auto loss = value_loss + prob_loss;
 
     loss.backward();
     optimizer->step();
 
     // 计算一次策略的交叉熵，用于性能检测用途
-    auto entropy = -mean(sum(log_act_prob * mcts_probs, 1), kFloat32);
+    auto entropy = -mean(sum(torch::log_softmax(act_prob, 1) * mcts_probs, 1), kFloat32);
     return std::make_pair(loss, entropy);
 }
 
