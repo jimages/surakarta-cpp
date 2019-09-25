@@ -309,9 +309,11 @@ void worker()
         // OK let's play game!
         size_t count = 0;
         SurakartaState game;
+        bool only_eat;
         while (game.get_winner() == 0 && count < GAME_LIMIT) {
+            only_eat = count > 100;
             Node<SurakartaState> root(game.player_to_move);
-            auto move = run_mcts_distribute(&root, game, world, true);
+            auto move = run_mcts_distribute(&root, game, world, true, only_eat);
             b = at::cat({ b, game.tensor() }, 0);
             p = at::cat({ p, get_statistc(&root) }, 0);
             game.do_move(move);

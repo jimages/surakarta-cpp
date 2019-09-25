@@ -86,9 +86,9 @@ public:
 
     torch::Tensor tensor() const;
 
-    bool has_moves() const
+    bool has_moves(bool only_eat = false) const
     {
-        return !get_moves().empty();
+        return !get_moves(only_eat).empty();
     }
 
     // Get the result of the match.
@@ -103,7 +103,7 @@ public:
     }
 
     void print(ostream& out) const;
-    std::vector<Move>& get_moves() const;
+    std::vector<Move>& get_moves(bool only_eat = false) const;
     int get_winner() const;
 
 private:
@@ -112,6 +112,7 @@ private:
 
     static const vector<pair<int, int>> directions;
     mutable bool has_get_moves = false;
+    mutable bool only_eat = false;
     mutable std::vector<Move> moves;
 
     size_t find_all(bool is_inner, int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const;
@@ -120,7 +121,7 @@ private:
         const decltype(inner_loop)::const_iterator end,
         decltype(inner_loop)::const_iterator curr,
         decltype(inner_loop)::const_iterator tart) const;
-    void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const;
+    void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter, bool only_eat) const;
 
     template <typename T>
     Move get_valid_eat_one_direction(T begin, T end, T pos) const

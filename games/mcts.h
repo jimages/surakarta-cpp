@@ -180,7 +180,7 @@ inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const tor
 
 template <typename State>
 float evaluate(
-    Node<State>* node, const State& state, mpi::communicator world)
+    Node<State>* node, const State& state, mpi::communicator world, bool only_eat)
 {
     torch::Tensor policy, value;
     std::tie(policy, value) = distribute_policy_value(state.tensor(), world);
@@ -189,7 +189,7 @@ float evaluate(
     assert(policy.device() == torch::kCPU);
     assert(value.device() == torch::kCPU);
 
-    for (auto& move : state.get_moves()) {
+    for (auto& move : state.get_moves(only_eat)) {
         // First we get the location from policy.
         node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>());
     }
@@ -209,12 +209,12 @@ void backpropagate(
 }
 
 template <typename State>
-typename State::Move run_mcts_distribute(Node<State>* root, const State& state, mpi::communicator world, bool is_selfplay = false)
+typename State::Move run_mcts_distribute(Node<State>* root, const State& state, mpi::communicator world, bool is_selfplay = false, bool only_eat = true)
 {
     assert(!root->expanded());
     assert(root != nullptr);
 
-    evaluate(root, state, world);
+    evaluate(root, state, world, only_eat);
     if (is_selfplay)
         root->add_exploration_noise();
 
@@ -227,7 +227,7 @@ typename State::Move run_mcts_distribute(Node<State>* root, const State& state, 
             std::tie(move, node) = node->best_child();
             game.do_move(move);
         }
-        float value = evaluate(node, game, world);
+        float value = evaluate(node, game, world, only_eat);
         backpropagate(node, game.player_to_move, value);
     }
 

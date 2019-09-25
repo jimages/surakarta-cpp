@@ -126,7 +126,7 @@ success:
     player_to_move = 3 - player_to_move;
     return;
 }
-void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const
+void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter, bool only_eat) const
 {
     // now we check can we eat something.
     bool flag = 0;
@@ -157,7 +157,7 @@ void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Mo
             flag |= 1;
         }
     }
-    if (flag)
+    if (flag && only_eat)
         return;
 
     // get all valiable moves.
@@ -195,10 +195,10 @@ void SurakartaState::print(ostream& out) const
         << endl;
 }
 // Get all available move.
-std::vector<SurakartaState::Move>& SurakartaState::get_moves() const
+std::vector<SurakartaState::Move>& SurakartaState::get_moves(bool only_eat) const
 {
     PR_ASSERT();
-    if (has_get_moves) {
+    if (has_get_moves && this->only_eat == only_eat) {
         return moves;
     } else {
         // 利用局部性原理，在用的时候清除
@@ -206,10 +206,11 @@ std::vector<SurakartaState::Move>& SurakartaState::get_moves() const
         for (auto row = 0; row < BOARD_SIZE; ++row)
             for (auto col = 0; col < BOARD_SIZE; ++col) {
                 if (board[row * BOARD_SIZE + col] == player_chess[player_to_move]) {
-                    get_valid_move(col, row, back_inserter(moves));
+                    get_valid_move(col, row, back_inserter(moves), only_eat);
                 }
             }
         has_get_moves = true;
+        this->only_eat = only_eat;
         return moves;
     }
 }
