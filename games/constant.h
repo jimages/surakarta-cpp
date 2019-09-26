@@ -34,8 +34,8 @@
 #define TIME_LIMIT 5
 
 // threshold the only_eat domain
-#define THRESHOLD_ONLY_EAT 100
+#define THRESHOLD_ONLY_EAT 200
 
-#define LONG_THRESHOLD 128
+#define LONG_THRESHOLD 64
 
 #endif // CONSTANT_H
