@@ -138,6 +138,13 @@ void train_server()
             mcts = torch::cat({ p, mcts });
             value = torch::cat({ v, value });
             std::cout << std::endl;
+            std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
+            for (int i = 0; i < b.size(0); ++i) {
+                std::cout << b[i][0] << std::endl;
+                std::cout << b[i][1] << std::endl;
+                std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
+            }
+            std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
             std::cout << "game: " << game
                       << " dataset: " << board.size(0)
                       << " game length:" << v.size(0)
@@ -310,23 +317,26 @@ void worker()
         size_t count = 0;
         SurakartaState game;
         bool only_eat;
-        int not_eat_step = 0;
         while (game.get_winner() == 0 && count < GAME_LIMIT) {
             only_eat = count > THRESHOLD_ONLY_EAT;
             Node<SurakartaState> root(game.player_to_move);
+            auto board = game.tensor();
+            unsigned int equal_count = 0;
             auto move = run_mcts_distribute(&root, game, world, true, only_eat);
-            if (move.is_eat) {
-                not_eat_step = 0;
-            } else {
-                ++not_eat_step;
+            // for long situation.
+            for (int i = b.size(0) - 1; i >= 0; --i) {
+                if (board.equal(b[i])) {
+                    equal_count++;
+                }
+                if (equal_count >= 3)
+                    break;
             }
-            b = at::cat({ b, game.tensor() }, 0);
+            b = at::cat({ b, board }, 0);
             p = at::cat({ p, get_statistc(&root) }, 0);
-            game.do_move(move);
-
-            // if in long situation. exit.
-            if (not_eat_step > LONG_THRESHOLD)
+            if (equal_count > 3)
                 break;
+            // if in long situation. exit.
+            game.do_move(move);
             ++count;
         }
         int winner = game.get_winner();
