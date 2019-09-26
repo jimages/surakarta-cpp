@@ -310,13 +310,23 @@ void worker()
         size_t count = 0;
         SurakartaState game;
         bool only_eat;
+        int not_eat_step = 0;
         while (game.get_winner() == 0 && count < GAME_LIMIT) {
             only_eat = count > THRESHOLD_ONLY_EAT;
             Node<SurakartaState> root(game.player_to_move);
             auto move = run_mcts_distribute(&root, game, world, true, only_eat);
+            if (move.is_eat) {
+                not_eat_step = 0;
+            } else {
+                ++not_eat_step;
+            }
             b = at::cat({ b, game.tensor() }, 0);
             p = at::cat({ p, get_statistc(&root) }, 0);
             game.do_move(move);
+
+            // if in long situation. exit.
+            if (not_eat_step > LONG_THRESHOLD)
+                break;
             ++count;
         }
         int winner = game.get_winner();

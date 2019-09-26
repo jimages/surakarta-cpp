@@ -36,4 +36,6 @@
 // threshold the only_eat domain
 #define THRESHOLD_ONLY_EAT 100
 
+#define LONG_THRESHOLD 128
+
 #endif // CONSTANT_H

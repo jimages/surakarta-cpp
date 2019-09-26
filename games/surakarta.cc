@@ -163,7 +163,7 @@ void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Mo
     // get all valiable moves.
     for (const auto& direc : directions) {
         if (x + direc.first < 6 && x + direc.first >= 0 && y + direc.second < 6 && y + direc.second >= 0 && board[BOARD_SIZE * (y + direc.second) + x + direc.first] == ChessType::Null) {
-            inserter = { 1, { x, y }, { x + direc.first, y + direc.second } };
+            inserter = { 1, { x, y }, { x + direc.first, y + direc.second }, false };
         }
     }
 }

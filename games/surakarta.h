@@ -48,6 +48,7 @@ public:
     typedef struct {
         bool is_activated; // is the movable
         pair<int, int> current, target;
+        bool is_eat;
     } Move;
 
     static const vector<pair<int, int>> outer_loop;
@@ -139,7 +140,7 @@ private:
             if (i == pos)
                 break;
             if (has_passed_arc && board[BOARD_SIZE * i->second + i->first] == player_chess[3 - player_to_move]) {
-                return { 1, { pos->first, pos->second }, { i->first, i->second } };
+                return { 1, { pos->first, pos->second }, { i->first, i->second }, true };
             } else if (board[BOARD_SIZE * i->second + i->first] == ChessType::Null) {
                 if (!has_passed_arc && arc_map[i->first + i->second * BOARD_SIZE] && arc_map[next->first + next->second * BOARD_SIZE])
                     has_passed_arc = true;
@@ -147,10 +148,10 @@ private:
                 if (*i == *pos)
                     continue;
                 else
-                    return { 0, { pos->first, pos->second }, { i->first, i->second } };
+                    return { 0, { pos->first, pos->second }, { i->first, i->second }, true };
             }
         }
-        return { 0, { pos->first, pos->second }, { pos->first, pos->second } };
+        return { 0, { pos->first, pos->second }, { pos->first, pos->second }, false };
     }
 
     template <class InputIt, class T>
