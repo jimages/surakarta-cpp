@@ -231,7 +231,7 @@ void evoluation_server()
     if (!torch::cuda::is_available()) {
         total_device = 1;
     }
-    PolicyValueNet net((world.rank() - 1) % total_device);
+    PolicyValueNet net((world.rank()) % total_device);
 
     // Init the model.
     double time = omp_get_wtime();
@@ -311,7 +311,7 @@ void worker()
         SurakartaState game;
         bool only_eat;
         while (game.get_winner() == 0 && count < GAME_LIMIT) {
-            only_eat = count > 100;
+            only_eat = count > THRESHOLD_ONLY_EAT;
             Node<SurakartaState> root(game.player_to_move);
             auto move = run_mcts_distribute(&root, game, world, true, only_eat);
             b = at::cat({ b, game.tensor() }, 0);
