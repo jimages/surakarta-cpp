@@ -31,7 +31,7 @@ const vector<pair<int, int>> SurakartaState::directions = { { 1, 0 }, { -1, 0 },
     { 0, -1 }, { -1, -1 } };
 
 const uint_fast8_t SurakartaState::arc_map[] = { 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0 };
-const torch::Tensor SurakartaState::outter_loop_mask = torch::from_blob((int[BOARD_SIZE* BOARD_SIZE]) {
+const torch::Tensor SurakartaState::outter_loop_mask = torch::from_blob((int[BOARD_SIZE* BOARD_SIZE]){
                                                                             0, 1, 0, 0, 1, 0,
                                                                             1, 1, 1, 1, 1, 1,
                                                                             0, 1, 0, 0, 1, 0,
@@ -39,7 +39,7 @@ const torch::Tensor SurakartaState::outter_loop_mask = torch::from_blob((int[BOA
                                                                             1, 1, 1, 1, 1, 1,
                                                                             0, 1, 0, 0, 1, 0 },
     { BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
-const torch::Tensor SurakartaState::inner_loop_mask = torch::from_blob((int[BOARD_SIZE* BOARD_SIZE]) {
+const torch::Tensor SurakartaState::inner_loop_mask = torch::from_blob((int[BOARD_SIZE* BOARD_SIZE]){
                                                                            0, 0, 1, 1, 0, 0,
                                                                            0, 0, 1, 1, 0, 0,
                                                                            1, 1, 1, 1, 1, 1,

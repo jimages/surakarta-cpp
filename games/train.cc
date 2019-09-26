@@ -80,7 +80,7 @@ void train_server()
     std::cout << "evoluiton batch size:" << EVO_BATCH << std::endl;
 
     unsigned long game = 1;
-    u_long batch = 0;
+    u_long batch = 1;
     torch::Tensor board = torch::empty({ 0 });
     torch::Tensor mcts = torch::empty({ 0 });
     torch::Tensor value = torch::empty({ 0 });
@@ -138,13 +138,6 @@ void train_server()
             mcts = torch::cat({ p, mcts });
             value = torch::cat({ v, value });
             std::cout << std::endl;
-            std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
-            for (int i = 0; i < b.size(0); ++i) {
-                std::cout << b[i][0] << std::endl;
-                std::cout << b[i][1] << std::endl;
-                std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
-            }
-            std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
             std::cout << "game: " << game
                       << " dataset: " << board.size(0)
                       << " game length:" << v.size(0)
@@ -325,7 +318,7 @@ void worker()
             auto move = run_mcts_distribute(&root, game, world, true, only_eat);
             // for long situation.
             for (int i = b.size(0) - 1; i >= 0; --i) {
-                if (board.equal(b[i])) {
+                if (board[0].equal(b[i][0]) && board[1].equal(b[i][1])) {
                     equal_count++;
                 }
                 if (equal_count >= 3)
@@ -344,7 +337,7 @@ void worker()
         int size = b.size(0);
         auto v = torch::zeros({ size }, torch::kFloat);
         for (int i = 0; i < size; ++i) {
-            v[i] = (i + 1) % 2 == winner ? 1.0F : 0.0F;
+            v[i] = (i % 2 + 1) == winner ? 1.0F : 0.0F;
         }
         std::array<std::string, 3> dataset;
         dataset[0] = torch_serialize(b);
