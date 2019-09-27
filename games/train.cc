@@ -317,21 +317,25 @@ void worker()
             unsigned int equal_count = 0;
             auto move = run_mcts_distribute(&root, game, world, true, only_eat);
             // for long situation.
-            for (int i = b.size(0) - 1; i >= 0; --i) {
-                if (board[0].equal(b[i][0]) && board[1].equal(b[i][1])) {
+            for (int i = b.size(0) - 2; i >= 0; i -= 2) {
+                if (board[0].slice(0, 0, 2).to(torch::kBool).equal(b[i].slice(0, 0, 2).to(torch::kBool))) {
                     equal_count++;
                 }
-                if (equal_count >= 3)
-                    break;
+                if (equal_count >= 3) {
+                    std::cout << "find long situation from process:" << world.rank() << std::endl;
+                    goto out;
+                }
             }
+        out:
             b = at::cat({ b, board }, 0);
             p = at::cat({ p, get_statistc(&root) }, 0);
-            if (equal_count > 3)
-                break;
+            if (equal_count >= 3)
+                goto finish;
             // if in long situation. exit.
             game.do_move(move);
             ++count;
         }
+    finish:
         int winner = game.get_winner();
         // play 1 or 2;
         int size = b.size(0);
