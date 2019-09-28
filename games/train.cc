@@ -322,6 +322,7 @@ void worker()
                     equal_count++;
                 }
                 if (equal_count >= 3) {
+                    std::cout << std::endl;
                     std::cout << "find long situation from process:" << world.rank() << std::endl;
                     goto out;
                 }
