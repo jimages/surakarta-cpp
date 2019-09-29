@@ -31,11 +31,9 @@
 #endif
 
 // 计算推断速度的时间阈值
-#define TIME_LIMIT 5
+#define TIME_LIMIT 20
 
 // threshold the only_eat domain
-#define THRESHOLD_ONLY_EAT 200
-
-#define LONG_THRESHOLD 200
+#define THRESHOLD_ONLY_EAT 100
 
 #endif // CONSTANT_H

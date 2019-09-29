@@ -41,7 +41,7 @@ torch::Tensor get_statistc(Node<SurakartaState>* node)
 {
     torch::Tensor prob = torch::zeros({ SURAKARTA_ACTION }, torch::kFloat);
     float total = std::accumulate((node->children).begin(), (node->children).end(), 0.0,
-        [](const double l, const std::pair<SurakartaState::Move, Node<SurakartaState>*>& r) { return l + r.second->visits; });
+        [](const float l, const std::pair<SurakartaState::Move, Node<SurakartaState>*>& r) { return l + r.second->visits; });
     for (auto i = (node->children).begin(); i != (node->children).end(); ++i) {
         prob[move2index(i->first)] = i->second->visits / total;
     }
@@ -310,7 +310,7 @@ void worker()
         size_t count = 0;
         SurakartaState game;
         bool only_eat;
-        while (game.get_winner() == 0 && count < GAME_LIMIT) {
+        while (game.terminal() == false && game.has_moves(count > THRESHOLD_ONLY_EAT) && count < GAME_LIMIT) {
             only_eat = count > THRESHOLD_ONLY_EAT;
             Node<SurakartaState> root(game.player_to_move);
             auto board = game.tensor();

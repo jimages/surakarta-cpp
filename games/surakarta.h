@@ -106,6 +106,7 @@ public:
     void print(ostream& out) const;
     std::vector<Move>& get_moves(bool only_eat = false) const;
     int get_winner() const;
+    bool terminal() const;
 
 private:
     ChessType board[BOARD_SIZE * BOARD_SIZE];

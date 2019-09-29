@@ -265,20 +265,29 @@ int SurakartaState::get_winner() const
         }
     }
 
-    // 如果有一方没有可行动作，则判断谁的子多即可
-    auto tmp_moves = get_moves();
-    if (tmp_moves.empty()) {
-        int num[3] = { 0 };
-        for (auto i = 1; i <= 2; ++i) {
-            num[i] = count(begin_iter, end_iter, player_chess[i]);
-        }
-        if (num[1] > num[2])
-            return 1;
-        else
-            return 2;
+    // 如果双方都有子，则判断谁的子多即可
+    size_t num[3] = { 0 };
+    for (size_t i = 1; i <= 2; ++i) {
+        num[i] = std::count(begin_iter, end_iter, player_chess[i]);
     }
-    // 0 means the game is not terminated.
-    return 0;
+    // 0 表示双方子数相同，给0即可
+    if (num[1] == num[2])
+        return 0;
+    if (num[1] > num[2])
+        return 1;
+    else
+        return 2;
+}
+bool SurakartaState::terminal() const
+{
+    auto begin_iter = begin(board);
+    auto end_iter = end(board);
+    for (auto i = 1; i <= 2; ++i) {
+        if (find(begin_iter, end_iter, player_chess[i]) == end_iter) {
+            return true;
+        }
+    }
+    return false;
 }
 size_t SurakartaState::find_all(bool is_inner, int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const
 {
