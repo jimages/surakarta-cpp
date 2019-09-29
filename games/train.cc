@@ -222,7 +222,7 @@ void evoluation_server()
     std::cout << "evaluation proecess rank:" << world.rank() << std::endl;
     boost::optional<mpi::status> status;
 
-    std::deque<std::pair<int, torch::Tensor>> evoluation_deque;
+    std::deque<int> sender_deque;
     std::vector<mpi::request> d_trans_queue;
 
     // When run on cpu we should initizlize the model on cpu.
@@ -245,31 +245,25 @@ void evoluation_server()
     u_long totoal_evaluation = 0;
 
     while (true) {
+        torch::Tensor evolution_batch = torch::empty({ 0 });
         if (status = req.test()) {
-            evoluation_deque.emplace_back(status->source(), torch_deserialize(state_buffer));
+            sender_deque.emplace_back(status->source());
+            evolution_batch = torch::cat({ evolution_batch, torch_deserialize(state_buffer) });
             req = world.irecv(mpi::any_source, 3, state_buffer);
         }
         // evoluate the state
-        if (evoluation_deque.size() >= EVO_BATCH) {
-            std::vector<int> source;
-            torch::Tensor states = torch::empty({ 0 });
-
-            while (!evoluation_deque.empty()) {
-                auto d = evoluation_deque.front();
-                source.emplace_back(d.first);
-                states = at::cat({ states, d.second });
-                evoluation_deque.pop_front();
-            }
+        if (sender_deque.size() >= EVO_BATCH) {
 
             torch::Tensor policy_logit, value;
-            std::tie(policy_logit, value) = net.policy_value(states);
+            std::tie(policy_logit, value) = net.policy_value(evolution_batch);
 
-            assert(policy_logit.size(0) == static_cast<long long>(source.size()));
-            long ind = 0;
-            for (auto i = source.begin(); i != source.end(); ++i) {
-                d_trans_queue.push_back(world.isend(*i, 4, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
-                ind++;
+            assert(policy_logit.size(0) == static_cast<long long>(evolution_batch.size(0)));
+            assert(sender_deque.size() == evolution_batch.size(0));
+
+            for (size_t ind = 0; ind != evolution_batch.size(0); ++ind) {
+                d_trans_queue.push_back(world.isend(sender_deque.at(ind), 4, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
             }
+            sender_deque.clear();
             totoal_evaluation += EVO_BATCH;
         }
         if ((omp_get_wtime() - time) > TIME_LIMIT) {
