@@ -243,9 +243,9 @@ void evoluation_server()
     last_sync_model = omp_get_wtime();
 
     u_long totoal_evaluation = 0;
+    torch::Tensor evolution_batch = torch::empty({ 0 });
 
     while (true) {
-        torch::Tensor evolution_batch = torch::empty({ 0 });
         if (status = req.test()) {
             sender_deque.emplace_back(status->source());
             evolution_batch = torch::cat({ evolution_batch, torch_deserialize(state_buffer) });
@@ -264,6 +264,7 @@ void evoluation_server()
                 d_trans_queue.push_back(world.isend(sender_deque.at(ind), 4, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
             }
             sender_deque.clear();
+            evolution_batch = torch::empty({ 0 });
             totoal_evaluation += EVO_BATCH;
         }
         if ((omp_get_wtime() - time) > TIME_LIMIT) {
@@ -315,7 +316,7 @@ void worker()
                 if (board[0].slice(0, 0, 2).to(torch::kBool).equal(b[i].slice(0, 0, 2).to(torch::kBool))) {
                     equal_count++;
                 }
-                if (equal_count >= 3) {
+                if (equal_count >= 10) {
                     std::cout << std::endl;
                     std::cout << "find long situation from process:" << world.rank() << std::endl;
                     goto out;
@@ -331,12 +332,14 @@ void worker()
             ++count;
         }
     finish:
+        // play 1 or 2, 0 for draw
         int winner = game.get_winner();
-        // play 1 or 2;
         int size = b.size(0);
         auto v = torch::zeros({ size }, torch::kFloat);
-        for (int i = 0; i < size; ++i) {
-            v[i] = (i % 2 + 1) == winner ? 1.0F : 0.0F;
+        if (winner != 0) {
+            for (int i = 0; i < size; ++i) {
+                v[i] = (i % 2 + 1) == winner ? 1.0F : -1.0F;
+            }
         }
         std::array<std::string, 3> dataset;
         dataset[0] = torch_serialize(b);

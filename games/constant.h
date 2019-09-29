@@ -5,7 +5,7 @@
 #define GAME 50000000
 
 // 单局步数限制
-#define GAME_LIMIT 300
+#define GAME_LIMIT 800
 
 // 训练batch
 #ifdef NDEBUG
@@ -34,6 +34,6 @@
 #define TIME_LIMIT 20
 
 // threshold the only_eat domain
-#define THRESHOLD_ONLY_EAT 100
+#define THRESHOLD_ONLY_EAT 300
 
 #endif // CONSTANT_H
