@@ -222,7 +222,7 @@ void evoluation_server()
     std::cout << "evaluation proecess rank:" << world.rank() << std::endl;
     boost::optional<mpi::status> status;
 
-    std::deque<std::pair<int, torch::Tensor>> evoluation_deque;
+    std::deque<int> sender_deque;
     std::vector<mpi::request> d_trans_queue;
 
     // When run on cpu we should initizlize the model on cpu.
@@ -243,33 +243,28 @@ void evoluation_server()
     last_sync_model = omp_get_wtime();
 
     u_long totoal_evaluation = 0;
+    torch::Tensor evolution_batch = torch::empty({ 0 });
 
     while (true) {
         if (status = req.test()) {
-            evoluation_deque.emplace_back(status->source(), torch_deserialize(state_buffer));
+            sender_deque.emplace_back(status->source());
+            evolution_batch = torch::cat({ evolution_batch, torch_deserialize(state_buffer) });
             req = world.irecv(mpi::any_source, 3, state_buffer);
         }
         // evoluate the state
-        if (evoluation_deque.size() >= EVO_BATCH) {
-            std::vector<int> source;
-            torch::Tensor states = torch::empty({ 0 });
-
-            while (!evoluation_deque.empty()) {
-                auto d = evoluation_deque.front();
-                source.emplace_back(d.first);
-                states = at::cat({ states, d.second });
-                evoluation_deque.pop_front();
-            }
+        if (sender_deque.size() >= EVO_BATCH) {
 
             torch::Tensor policy_logit, value;
-            std::tie(policy_logit, value) = net.policy_value(states);
+            std::tie(policy_logit, value) = net.policy_value(evolution_batch);
 
-            assert(policy_logit.size(0) == static_cast<long long>(source.size()));
-            long ind = 0;
-            for (auto i = source.begin(); i != source.end(); ++i) {
-                d_trans_queue.push_back(world.isend(*i, 4, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
-                ind++;
+            assert(policy_logit.size(0) == static_cast<long long>(evolution_batch.size(0)));
+            assert(sender_deque.size() == evolution_batch.size(0));
+
+            for (size_t ind = 0; ind != evolution_batch.size(0); ++ind) {
+                d_trans_queue.push_back(world.isend(sender_deque.at(ind), 4, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
             }
+            sender_deque.clear();
+            evolution_batch = torch::empty({ 0 });
             totoal_evaluation += EVO_BATCH;
         }
         if ((omp_get_wtime() - time) > TIME_LIMIT) {
@@ -321,7 +316,7 @@ void worker()
                 if (board[0].slice(0, 0, 2).to(torch::kBool).equal(b[i].slice(0, 0, 2).to(torch::kBool))) {
                     equal_count++;
                 }
-                if (equal_count >= 3) {
+                if (equal_count >= 10) {
                     std::cout << std::endl;
                     std::cout << "find long situation from process:" << world.rank() << std::endl;
                     goto out;
@@ -337,12 +332,14 @@ void worker()
             ++count;
         }
     finish:
+        // play 1 or 2, 0 for draw
         int winner = game.get_winner();
-        // play 1 or 2;
         int size = b.size(0);
         auto v = torch::zeros({ size }, torch::kFloat);
-        for (int i = 0; i < size; ++i) {
-            v[i] = (i % 2 + 1) == winner ? 1.0F : 0.0F;
+        if (winner != 0) {
+            for (int i = 0; i < size; ++i) {
+                v[i] = (i % 2 + 1) == winner ? 1.0F : -1.0F;
+            }
         }
         std::array<std::string, 3> dataset;
         dataset[0] = torch_serialize(b);
