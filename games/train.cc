@@ -310,7 +310,7 @@ void worker()
         size_t count = 0;
         SurakartaState game;
         bool only_eat;
-        while (game.terminal() == false && game.has_moves(count > THRESHOLD_ONLY_EAT) && count < GAME_LIMIT) {
+        while (!game.terminal() && game.has_moves(count > THRESHOLD_ONLY_EAT) && count < GAME_LIMIT) {
             only_eat = count > THRESHOLD_ONLY_EAT;
             Node<SurakartaState> root(game.player_to_move);
             auto board = game.tensor();
