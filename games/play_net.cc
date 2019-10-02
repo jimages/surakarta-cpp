@@ -86,6 +86,7 @@ int main()
 
         SurakartaState state;
         PolicyValueNet network;
+        network.load_model("value_policy.pt");
         state.player_to_move = 1;
         while (state.has_moves()) {
             cout << endl
