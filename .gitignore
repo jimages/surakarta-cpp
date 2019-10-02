@@ -48,3 +48,9 @@ build-release/
 build-debug/
 *.swp
 .vscode/
+
+# the pt file
+*.pt
+
+# the mac files
+*.DS_Store

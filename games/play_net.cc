@@ -1,4 +1,3 @@
-#include "helper.h"
 #include "mcts.h"
 #include "surakarta.h"
 #include <arpa/inet.h>
@@ -13,9 +12,49 @@
 #include <utility>
 #include <vector>
 
+#define PORT 8999
+#define BUFFER 2048
+
+SurakartaState::Move fromsocket(int fd)
+{
+    char buffer[BUFFER];
+    auto l = recv(fd, buffer, BUFFER, 0);
+    if (l == -1) {
+        perror(strerror(errno));
+        exit(-1);
+    }
+    assert(l == 7);
+    buffer[7] = '\0';
+    std::stringstream str;
+    str << buffer;
+    SurakartaState::Move m = SurakartaState::no_move;
+    str >> m;
+    return m;
+}
+
+void tosocket(int fd, SurakartaState::Move move)
+{
+    std::stringstream m;
+    m << move;
+    auto str = m.str();
+    if (send(fd, str.c_str(), str.length(), 0) == -1) {
+        perror(strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+}
+
 int main()
 {
     try {
+        auto serverfd = socket(AF_INET, SOCK_STREAM, 0);
+        if (serverfd == -1) {
+            perror(strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+
+        decltype(serverfd) fd;
+        struct sockaddr_in src_addr, des_addr;
+
         bool counter_first = false;
         bool should_move = false;
 
@@ -23,10 +62,30 @@ int main()
             should_move = true;
         }
 
+        memset(&src_addr, '\0', sizeof(src_addr));
+
+        src_addr.sin_family = AF_INET;
+        src_addr.sin_addr.s_addr = INADDR_ANY;
+        src_addr.sin_port = htons(PORT);
+
+        socklen_t addrlen = sizeof(src_addr);
+        if (bind(serverfd, (struct sockaddr*)&src_addr, sizeof(src_addr)) < 0) {
+            perror(strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        if (listen(serverfd, 1) != 0) {
+            perror(strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        if ((fd = accept(serverfd, (struct sockaddr*)&des_addr, &addrlen)) < 0) {
+            perror(strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        if (counter_first)
+            send(fd, static_cast<const void*>("1"), static_cast<size_t>(1), 0);
+
         SurakartaState state;
         PolicyValueNet network;
-        if (exists("value_policy.pt"))
-            network.load_model("value_policy.pt");
         state.player_to_move = 1;
         while (state.has_moves()) {
             cout << endl
@@ -38,8 +97,9 @@ int main()
                     try {
                         MCTS::Node<SurakartaState> root(state.player_to_move);
                         move = MCTS::run_mcts(&root, state, network);
-                        std::cout << "alphazero move: " << move;
+                        std::cout << "we move: " << move;
                         state.do_move(move);
+                        tosocket(fd, move);
                         break;
                     } catch (std::exception& e) {
                         cout << "Invalid move." << endl;
@@ -48,15 +108,13 @@ int main()
                 }
             } else {
                 while (true) {
+                    move = fromsocket(fd);
                     try {
-                        cout << "Input your move: ";
-                        std::cin >> move;
-                        std::cout << "we move: " << move;
+                        std::cout << "opponent move: " << move;
                         state.do_move(move);
                         break;
-                    } catch (std::exception& e) {
+                    } catch (std::exception&) {
                         cout << "Invalid move." << endl;
-                        cout << e.what() << std::endl;
                     }
                 }
             }

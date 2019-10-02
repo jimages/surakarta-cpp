@@ -66,6 +66,8 @@ public:
     static const char player_markers[3];
     static const ChessType player_chess[3];
 
+    friend inline ostream& operator<<(ostream& out, const SurakartaState& state);
+
     int player_to_move;
 
     SurakartaState()
@@ -103,7 +105,6 @@ public:
             return 1.0;
     }
 
-    void print(ostream& out) const;
     std::vector<Move>& get_moves(bool only_eat = false) const;
     int get_winner() const;
     bool terminal() const;
@@ -168,9 +169,33 @@ private:
 
 inline ostream& operator<<(ostream& out, const SurakartaState& state)
 {
-    state.print(out);
+    out << endl;
+    // print the first line.
+    out << "  ";
+    for (int col = 0; col < BOARD_SIZE - 1; ++col) {
+        out << col << ' ';
+    }
+    // the last columns
+    out << BOARD_SIZE - 1 << endl;
+
+    // for the second line.
+    for (int row = 0; row < BOARD_SIZE; ++row) {
+        out << row << " ";
+        for (int col = 0; col < BOARD_SIZE - 1; ++col) {
+            out << SurakartaState::player_markers[state.board[BOARD_SIZE * row + col]] << ' ';
+        }
+        out << SurakartaState::player_markers[state.board[BOARD_SIZE * row + BOARD_SIZE - 1]] << " |" << endl;
+    }
+    out << "+";
+    for (int col = 0; col < BOARD_SIZE - 1; ++col) {
+        out << "--";
+    }
+    out << "-+" << endl;
+    out << SurakartaState::player_markers[state.player_to_move] << " to move " << endl
+        << endl;
     return out;
 }
+
 inline istream& operator>>(istream& in, SurakartaState::Move& move)
 {
     int cur_x, cur_y;
@@ -227,4 +252,5 @@ inline size_t move2index(const SurakartaState::Move& move)
 
     return BOARD_SIZE * BOARD_SIZE * pair2index(move.current) + pair2index(move.target);
 }
+
 #endif // SURAKARTA_H

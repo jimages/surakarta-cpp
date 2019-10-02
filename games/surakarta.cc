@@ -31,7 +31,7 @@ const vector<pair<int, int>> SurakartaState::directions = { { 1, 0 }, { -1, 0 },
     { 0, -1 }, { -1, -1 } };
 
 const uint_fast8_t SurakartaState::arc_map[] = { 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0 };
-const torch::Tensor SurakartaState::outter_loop_mask = torch::from_blob((int[BOARD_SIZE* BOARD_SIZE]){
+const torch::Tensor SurakartaState::outter_loop_mask = torch::from_blob((int[BOARD_SIZE* BOARD_SIZE]) {
                                                                             0, 1, 0, 0, 1, 0,
                                                                             1, 1, 1, 1, 1, 1,
                                                                             0, 1, 0, 0, 1, 0,
@@ -39,7 +39,7 @@ const torch::Tensor SurakartaState::outter_loop_mask = torch::from_blob((int[BOA
                                                                             1, 1, 1, 1, 1, 1,
                                                                             0, 1, 0, 0, 1, 0 },
     { BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
-const torch::Tensor SurakartaState::inner_loop_mask = torch::from_blob((int[BOARD_SIZE* BOARD_SIZE]){
+const torch::Tensor SurakartaState::inner_loop_mask = torch::from_blob((int[BOARD_SIZE* BOARD_SIZE]) {
                                                                            0, 0, 1, 1, 0, 0,
                                                                            0, 0, 1, 1, 0, 0,
                                                                            1, 1, 1, 1, 1, 1,
@@ -166,33 +166,6 @@ void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Mo
             inserter = { 1, { x, y }, { x + direc.first, y + direc.second }, false };
         }
     }
-}
-void SurakartaState::print(ostream& out) const
-{
-    out << endl;
-    // print the first line.
-    out << "  ";
-    for (int col = 0; col < BOARD_SIZE - 1; ++col) {
-        out << col << ' ';
-    }
-    // the last columns
-    out << BOARD_SIZE - 1 << endl;
-
-    // for the second line.
-    for (int row = 0; row < BOARD_SIZE; ++row) {
-        out << row << " ";
-        for (int col = 0; col < BOARD_SIZE - 1; ++col) {
-            out << player_markers[board[BOARD_SIZE * row + col]] << ' ';
-        }
-        out << player_markers[board[BOARD_SIZE * row + BOARD_SIZE - 1]] << " |" << endl;
-    }
-    out << "+";
-    for (int col = 0; col < BOARD_SIZE - 1; ++col) {
-        out << "--";
-    }
-    out << "-+" << endl;
-    out << player_markers[player_to_move] << " to move " << endl
-        << endl;
 }
 // Get all available move.
 std::vector<SurakartaState::Move>& SurakartaState::get_moves(bool only_eat) const

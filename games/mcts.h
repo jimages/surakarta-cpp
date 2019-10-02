@@ -45,6 +45,9 @@
 #define SIMULATION 100
 #endif // NDEBUG
 
+// mcts simulation in match mode.
+#define SIMULATION_MATCH 2000
+
 //
 //
 // [1] Silver, D., Hubert, T., Schrittwieser, J., Antonoglou, I., Lai, M., Guez, A., … Hassabis, D. (2018).
@@ -196,6 +199,24 @@ float evaluate(
 
     return value.item<float>();
 }
+template <typename State>
+float evaluate(
+    Node<State>* node, const State& state, PolicyValueNet& network, bool only_eat)
+{
+    torch::Tensor policy, value;
+    std::tie(policy, value) = network.policy_value(state.tensor());
+
+    // 确认是否进入了cpu
+    assert(policy.device() == torch::kCPU);
+    assert(value.device() == torch::kCPU);
+
+    for (auto& move : state.get_moves(only_eat)) {
+        // First we get the location from policy.
+        node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>());
+    }
+
+    return value.item<float>();
+}
 
 template <typename State>
 void backpropagate(
@@ -209,7 +230,7 @@ void backpropagate(
 }
 
 template <typename State>
-typename State::Move run_mcts_distribute(Node<State>* root, const State& state, mpi::communicator world, bool is_selfplay = false, bool only_eat = true)
+typename State::Move run_mcts_distribute(Node<State>* root, const State& state, mpi::communicator world, bool is_selfplay = false, bool only_eat = false)
 {
     assert(!root->expanded());
     assert(root != nullptr);
@@ -233,5 +254,29 @@ typename State::Move run_mcts_distribute(Node<State>* root, const State& state, 
 
     return root->best_action().first;
 }
+template <typename State>
+typename State::Move run_mcts(Node<State>* root, const State& state, PolicyValueNet& netowrk, bool only_eat = false)
+{
+    assert(!root->expanded());
+    assert(root != nullptr);
+
+    evaluate(root, state, netowrk, only_eat);
+
+    for (int i = 0; i < SIMULATION_MATCH; ++i) {
+        auto node = root;
+        auto game = state;
+
+        while (node->expanded()) {
+            typename State::Move move;
+            std::tie(move, node) = node->best_child();
+            game.do_move(move);
+        }
+        float value = evaluate(node, game, netowrk, only_eat);
+        backpropagate(node, game.player_to_move, value);
+    }
+
+    return root->best_action().first;
+}
+
 }
 #endif
