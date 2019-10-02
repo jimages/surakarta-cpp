@@ -173,13 +173,14 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
 
 void PolicyValueNet::save_model(std::string model_file)
 {
-    model.to(torch::kCPU);
+    model->to(torch::kCPU);
     torch::save(model, model_file);
-    model.to(device);
+    model->to(device);
 }
 
 void PolicyValueNet::load_model(std::string model_file)
 {
+    std::cout << "Load the model from file:" << model_file << std::endl;
     torch::load(model, model_file);
     model->to(device);
 }
