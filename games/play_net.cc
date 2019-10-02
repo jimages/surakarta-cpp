@@ -46,6 +46,12 @@ void tosocket(int fd, SurakartaState::Move move)
 int main()
 {
     try {
+        PolicyValueNet network;
+        network.load_model("value_policy.pt");
+
+        SurakartaState state;
+        state.player_to_move = 1;
+
         auto serverfd = socket(AF_INET, SOCK_STREAM, 0);
         if (serverfd == -1) {
             perror(strerror(errno));
@@ -84,10 +90,6 @@ int main()
         if (counter_first)
             send(fd, static_cast<const void*>("1"), static_cast<size_t>(1), 0);
 
-        SurakartaState state;
-        PolicyValueNet network;
-        network.load_model("value_policy.pt");
-        state.player_to_move = 1;
         while (state.has_moves()) {
             cout << endl
                  << "State: " << state << endl;

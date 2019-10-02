@@ -45,11 +45,13 @@ public:
     enum ChessType : char { Red = 1,
         Black = 2,
         Null = 0 };
-    typedef struct {
+    struct surakarta_move {
         bool is_activated; // is the movable
         pair<int, int> current, target;
         bool is_eat;
-    } Move;
+    };
+    typedef surakarta_move Move;
+
 
     static const vector<pair<int, int>> outer_loop;
     static const vector<pair<int, int>> inner_loop;

@@ -54,13 +54,11 @@ void SurakartaState::do_move(Move move, bool is_human)
     PR_ASSERT();
 
     // check the target position can only be held by null or enimy.
-    assert(board[move.current.second * BOARD_SIZE + move.current.first]
-        == player_chess[player_to_move]);
-    assert(board[move.target.second * BOARD_SIZE + move.target.first]
-        != player_chess[player_to_move]);
+    assert(board[pair2index(move.current)] == player_chess[player_to_move]);
+    assert(board[pair2index(move.target)] != player_chess[player_to_move]);
 
     if (is_human) {
-        if (board[move.target.second * BOARD_SIZE + move.target.first] == ChessType::Null) {
+        if (board[pair2index(move.target)] == ChessType::Null) {
             // we check the available position
             const auto& current = move.current;
             const auto& target = move.target;
@@ -74,10 +72,10 @@ void SurakartaState::do_move(Move move, bool is_human)
                 || (abs(current.second - target.second) > 1))
                 throw runtime_error("下的位置不合法");
 
-            board[target.second * BOARD_SIZE + target.first] = player_chess[player_to_move];
-            board[current.second * BOARD_SIZE + current.first] = ChessType::Null;
+            board[pair2index(target)] = player_chess[player_to_move];
+            board[pair2index(current)] = ChessType::Null;
 
-        } else if (board[move.target.second * BOARD_SIZE + move.target.first]
+        } else if (board[pair2index(move.target)]
             == player_chess[3 - player_to_move]) {
             // check can we eat the certain postion
 
@@ -105,8 +103,8 @@ void SurakartaState::do_move(Move move, bool is_human)
             for (auto cur : cur_pos_inn) {
                 for (auto tar : tar_pos_inn) {
                     if (can_eat(inner_loop.cbegin(), inner_loop.cend(), cur, tar)) {
-                        board[tar->second * BOARD_SIZE + tar->first] = player_chess[player_to_move];
-                        board[cur->second * BOARD_SIZE + cur->first] = ChessType::Null;
+                        board[pair2index(*tar)] = player_chess[player_to_move];
+                        board[pair2index(*cur)] = ChessType::Null;
                         goto success;
                     }
                 }
@@ -116,8 +114,8 @@ void SurakartaState::do_move(Move move, bool is_human)
             throw runtime_error("下的位置不合法");
         }
     } else {
-        board[move.target.second * BOARD_SIZE + move.target.first] = player_chess[player_to_move];
-        board[move.current.second * BOARD_SIZE + move.current.first] = ChessType::Null;
+        board[pair2index(move.target)] = player_chess[player_to_move];
+        board[pair2index(move.current)] = ChessType::Null;
     }
 
 success:
