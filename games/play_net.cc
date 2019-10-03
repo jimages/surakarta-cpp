@@ -62,11 +62,7 @@ int main()
         struct sockaddr_in src_addr, des_addr;
 
         bool counter_first = false;
-        bool should_move = false;
-
-        if (!counter_first) {
-            should_move = true;
-        }
+        bool should_move = !counter_first;
 
         memset(&src_addr, '\0', sizeof(src_addr));
 

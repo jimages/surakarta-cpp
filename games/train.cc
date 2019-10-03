@@ -257,7 +257,7 @@ void evoluation_server()
             assert(policy_logit.size(0) == static_cast<long long>(evolution_batch.size(0)));
             assert(sender_deque.size() == evolution_batch.size(0));
 
-            for (size_t ind = 0; ind != evolution_batch.size(0); ++ind) {
+            for (long long ind = 0; ind != evolution_batch.size(0); ++ind) {
                 d_trans_queue.push_back(world.isend(sender_deque.at(ind), 4, std::make_pair(torch_serialize(policy_logit[ind]), torch_serialize(value[ind]))));
             }
             sender_deque.clear();
@@ -311,9 +311,10 @@ void worker()
             // for long situation.
             for (int i = b.size(0) - 2; i >= 0; i -= 2) {
                 if (board[0].slice(0, 0, 2).to(torch::kBool).equal(b[i].slice(0, 0, 2).to(torch::kBool))) {
+                    std::cout << board[0].slice(0, 0, 2) << '\n';
                     equal_count++;
                 }
-                if (equal_count >= 10) {
+                if (equal_count >= 3) {
                     std::cout << std::endl;
                     std::cout << "find long situation from process:" << world.rank() << std::endl;
                     goto out;
