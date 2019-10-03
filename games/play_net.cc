@@ -86,6 +86,7 @@ int main()
         if (counter_first)
             send(fd, static_cast<const void*>("1"), static_cast<size_t>(1), 0);
 
+        int steps = 0;
         while (state.has_moves()) {
             cout << endl
                  << "State: " << state << endl;
@@ -95,7 +96,7 @@ int main()
                 while (true) {
                     try {
                         MCTS::Node<SurakartaState> root(state.player_to_move);
-                        move = MCTS::run_mcts(&root, state, network);
+                        move = MCTS::run_mcts(&root, state, network, steps / 2);
                         std::cout << "we move: " << move;
                         state.do_move(move);
                         tosocket(fd, move);
@@ -118,6 +119,7 @@ int main()
                 }
             }
             should_move = !should_move;
+            ++steps;
         }
 
         std::cout << endl

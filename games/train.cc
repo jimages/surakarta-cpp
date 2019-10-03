@@ -307,7 +307,7 @@ void worker()
             Node<SurakartaState> root(game.player_to_move);
             auto board = game.tensor();
             unsigned int equal_count = 0;
-            auto move = run_mcts_distribute(&root, game, world, true, only_eat);
+            auto move = run_mcts_distribute(&root, game, world, count / 2, only_eat);
             // for long situation.
             for (int i = b.size(0) - 2; i >= 0; i -= 2) {
                 if (board[0].slice(0, 0, 2).to(torch::kBool).equal(b[i].slice(0, 0, 2).to(torch::kBool))) {

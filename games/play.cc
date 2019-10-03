@@ -28,6 +28,7 @@ int main()
         if (exists("value_policy.pt"))
             network.load_model("value_policy.pt");
         state.player_to_move = 1;
+        int steps = 0;
         while (state.has_moves()) {
             cout << endl
                  << "State: " << state << endl;
@@ -37,7 +38,7 @@ int main()
                 while (true) {
                     try {
                         MCTS::Node<SurakartaState> root(state.player_to_move);
-                        move = MCTS::run_mcts(&root, state, network);
+                        move = MCTS::run_mcts(&root, state, network, steps / 2);
                         std::cout << "alphazero move: " << move;
                         state.do_move(move);
                         break;
@@ -61,6 +62,7 @@ int main()
                 }
             }
             should_move = !should_move;
+            ++steps;
         }
 
         std::cout << endl

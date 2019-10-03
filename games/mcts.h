@@ -25,6 +25,7 @@
 #include <future>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <random>
@@ -108,12 +109,27 @@ public:
                 const std::pair<Move, Node<State>*>& b) { return a.second->ucb_score() < b.second->ucb_score(); });
     }
 
-    std::pair<Move, Node<State>*> best_action() const
+    std::pair<Move, Node<State>*> best_action(uint_fast32_t steps, bool is_selfplay = false) const
     {
         assert(!children.empty());
-        return *std::max_element(children.begin(), children.end(),
-            [](const std::pair<Move, Node<State>*>& a,
-                const std::pair<Move, Node<State>*>& b) { return a.second->visits < b.second->visits; });
+        std::vector<typename decltype(children)::value_type> v(children.begin(), children.end());
+        if (steps <= 30 && is_selfplay) {
+
+            std::vector<double> w;
+            w.reserve(v.size());
+            std::transform(v.begin(), v.end(), std::back_inserter(w), [](const std::pair<Move, Node<State>*>& r) { return r.second->visits; });
+
+            // get the action
+            std::random_device dev;
+            std::mt19937 rd(dev());
+            std::discrete_distribution<> dd(w.begin(), w.end());
+            long ac_idx = dd(rd);
+            return v[ac_idx];
+        } else {
+            return *std::max_element(children.begin(), children.end(),
+                [](const std::pair<Move, Node<State>*>& a,
+                    const std::pair<Move, Node<State>*>& b) { return a.second->visits < b.second->visits; });
+        }
     }
 
     bool expanded() const
@@ -150,7 +166,8 @@ public:
     void add_exploration_noise()
     {
         assert(!children.empty());
-        std::random_device rd;
+        std::random_device dev;
+        std::mt19937 rd(dev());
         std::gamma_distribution<float> gamma(0.3);
         for (auto i = children.begin(); i != children.end(); ++i) {
             i->second->P = i->second->P * 0.75 + gamma(rd) * 0.25;
@@ -191,10 +208,12 @@ float evaluate(
     // 确认是否进入了cpu
     assert(policy.device() == torch::kCPU);
     assert(value.device() == torch::kCPU);
+    auto& moves = state.get_moves(only_eat);
+    float policy_sum = std::accumulate(moves.begin(), moves.end(), 0.0f, [&policy](float l, const typename State::Move& move) { return l + policy[0][move2index(move)].template item<float>(); });
 
-    for (auto& move : state.get_moves(only_eat)) {
+    for (auto& move : moves) {
         // First we get the location from policy.
-        node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>());
+        node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>() / policy_sum);
     }
 
     return value.item<float>();
@@ -205,15 +224,17 @@ float evaluate(
 {
     torch::Tensor policy, value;
     std::tie(policy, value) = network.policy_value(state.tensor());
+    auto& moves = state.get_moves(only_eat);
+    float policy_sum = std::accumulate(moves.begin(), moves.end(), 0.0f, [&policy](float l, const typename State::Move& move) { return l + policy[0][move2index(move)].template item<float>(); });
+
+    for (auto& move : moves) {
+        // First we get the location from policy.
+        node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>() / policy_sum);
+    }
 
     // 确认是否进入了cpu
     assert(policy.device() == torch::kCPU);
     assert(value.device() == torch::kCPU);
-
-    for (auto& move : state.get_moves(only_eat)) {
-        // First we get the location from policy.
-        node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>());
-    }
 
     return value.item<float>();
 }
@@ -230,14 +251,13 @@ void backpropagate(
 }
 
 template <typename State>
-typename State::Move run_mcts_distribute(Node<State>* root, const State& state, mpi::communicator world, bool is_selfplay = false, bool only_eat = false)
+typename State::Move run_mcts_distribute(Node<State>* root, const State& state, mpi::communicator world, const int steps, bool only_eat = false)
 {
     assert(!root->expanded());
     assert(root != nullptr);
 
     evaluate(root, state, world, only_eat);
-    if (is_selfplay)
-        root->add_exploration_noise();
+    root->add_exploration_noise();
 
     for (int i = 0; i < SIMULATION; ++i) {
         auto node = root;
@@ -252,10 +272,10 @@ typename State::Move run_mcts_distribute(Node<State>* root, const State& state, 
         backpropagate(node, game.player_to_move, value);
     }
 
-    return root->best_action().first;
+    return root->best_action(steps, true).first;
 }
 template <typename State>
-typename State::Move run_mcts(Node<State>* root, const State& state, PolicyValueNet& netowrk, bool only_eat = false)
+typename State::Move run_mcts(Node<State>* root, const State& state, PolicyValueNet& netowrk, const int steps, bool only_eat = false)
 {
     assert(!root->expanded());
     assert(root != nullptr);
@@ -275,8 +295,7 @@ typename State::Move run_mcts(Node<State>* root, const State& state, PolicyValue
         backpropagate(node, game.player_to_move, value);
     }
 
-    return root->best_action().first;
+    return root->best_action(steps).first;
 }
-
 }
 #endif
