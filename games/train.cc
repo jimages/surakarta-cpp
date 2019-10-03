@@ -311,10 +311,9 @@ void worker()
             // for long situation.
             for (int i = b.size(0) - 2; i >= 0; i -= 2) {
                 if (board[0].slice(0, 0, 2).to(torch::kBool).equal(b[i].slice(0, 0, 2).to(torch::kBool))) {
-                    std::cout << board[0].slice(0, 0, 2) << '\n';
                     equal_count++;
                 }
-                if (equal_count >= 3) {
+                if (equal_count >= LONG_SITUATION_THRESHOLD) {
                     std::cout << std::endl;
                     std::cout << "find long situation from process:" << world.rank() << std::endl;
                     goto out;
@@ -323,7 +322,7 @@ void worker()
         out:
             b = at::cat({ b, board }, 0);
             p = at::cat({ p, get_statistc(&root) }, 0);
-            if (equal_count >= 3)
+            if (equal_count >= LONG_SITUATION_THRESHOLD)
                 goto finish;
             // if in long situation. exit.
             game.do_move(move);

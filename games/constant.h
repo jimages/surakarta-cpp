@@ -36,4 +36,6 @@
 // threshold the only_eat domain
 #define THRESHOLD_ONLY_EAT 300
 
+#define LONG_SITUATION_THRESHOLD 3
+
 #endif // CONSTANT_H
