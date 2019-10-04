@@ -1,7 +1,6 @@
 // Author: jiamges123@gmail.com
 // Zachary Wang 2019
-#ifndef SURAKARTA_H
-#define SURAKARTA_H
+#pragma once
 
 #include <algorithm>
 #include <cassert>
@@ -51,7 +50,6 @@ public:
         bool is_eat;
     };
     typedef surakarta_move Move;
-
 
     static const vector<pair<int, int>> outer_loop;
     static const vector<pair<int, int>> inner_loop;
@@ -254,5 +252,3 @@ inline size_t move2index(const SurakartaState::Move& move)
 
     return BOARD_SIZE * BOARD_SIZE * pair2index(move.current) + pair2index(move.target);
 }
-
-#endif // SURAKARTA_H

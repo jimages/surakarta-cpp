@@ -1,5 +1,4 @@
-#ifndef MCTS_HEADER_PETTER
-#define MCTS_HEADER_PETTER
+#pragma once
 #include <cassert>
 //
 // Zachary Wang 2019
@@ -63,6 +62,7 @@ namespace mpi = boost::mpi;
 namespace MCTS {
 using std::cerr;
 using std::endl;
+using std::shared_ptr;
 using std::size_t;
 using std::vector;
 
@@ -75,10 +75,11 @@ class Node {
 public:
     using Move = typename State::Move;
 
-    std::map<Move, Node<State>*> children;
+    std::map<Move, shared_ptr<Node<State>>> children;
+    using move_node_tuple = typename decltype(children)::value_type;
     const Move move;
     const int player_to_move;
-    Node* const parent;
+    shared_ptr<Node<State>> parent;
 
     int visits = 0;
     float value_sum = 0.0;
@@ -87,37 +88,37 @@ public:
     Node(int to_move, float prior = 0.0)
         : move(State::no_move)
         , player_to_move(to_move)
-        , parent(nullptr)
+        , P(prior)
+    {
+    }
+    Node(int player_to_move, const Move& move_, Node* parent_, float prior)
+        : move(move_)
+        , player_to_move(player_to_move)
+        , parent(parent_)
+        , visits(0)
         , P(prior)
     {
     }
 
     Node(const Node&) = delete;
 
-    ~Node()
-    {
-        for (auto& child : children) {
-            delete child.second;
-        }
-    }
-
-    std::pair<Move, Node<State>*> best_child() const
+    move_node_tuple best_child() const
     {
         assert(!children.empty());
         return *std::max_element(children.begin(), children.end(),
-            [](const std::pair<Move, Node<State>*>& a,
-                const std::pair<Move, Node<State>*>& b) { return a.second->ucb_score() < b.second->ucb_score(); });
+            [](const move_node_tuple& a,
+                const move_node_tuple& b) { return a.second->ucb_score() < b.second->ucb_score(); });
     }
 
-    std::pair<Move, Node<State>*> best_action(uint_fast32_t steps, bool is_selfplay = false) const
+    move_node_tuple best_action(uint_fast32_t steps, bool is_selfplay = false) const
     {
         assert(!children.empty());
-        std::vector<typename decltype(children)::value_type> v(children.begin(), children.end());
+        std::vector<move_node_tuple> v(children.begin(), children.end());
         if (steps <= 30 && is_selfplay) {
 
             std::vector<double> w;
             w.reserve(v.size());
-            std::transform(v.begin(), v.end(), std::back_inserter(w), [](const std::pair<Move, Node<State>*>& r) { return r.second->visits; });
+            std::transform(v.begin(), v.end(), std::back_inserter(w), [](const move_node_tuple& r) { return r.second->visits; });
 
             // get the action
             std::random_device dev;
@@ -127,8 +128,8 @@ public:
             return v[ac_idx];
         } else {
             return *std::max_element(children.begin(), children.end(),
-                [](const std::pair<Move, Node<State>*>& a,
-                    const std::pair<Move, Node<State>*>& b) { return a.second->visits < b.second->visits; });
+                [](const move_node_tuple& a,
+                    const move_node_tuple& b) { return a.second->visits < b.second->visits; });
         }
     }
 
@@ -137,13 +138,19 @@ public:
         return !(children.empty());
     }
 
-    Node<State>* add_child(int player2move, const Move& move, float prior)
+    shared_ptr<Node<State>> add_child(int player2move, const Move& move, float prior)
     {
-        auto node = new Node(player2move, move, this, prior);
+        auto node = std::make_shared<Node>(player2move, move, this, prior);
         children[move] = node;
         assert(!children.empty());
 
         return node;
+    }
+    shared_ptr<Node<State>> get_child(const Move& move)
+    {
+        auto p = children.at(move);
+        p->parent.reset();
+        return p;
     }
 
     float value() const
@@ -175,14 +182,6 @@ public:
     }
 
 private:
-    Node(int player_to_move, const Move& move_, Node* parent_, float prior)
-        : move(move_)
-        , player_to_move(player_to_move)
-        , parent(parent_)
-        , visits(0)
-        , P(prior)
-    {
-    }
 };
 
 /////////////////////////////////////////////////////////
@@ -200,7 +199,7 @@ inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const tor
 
 template <typename State>
 float evaluate(
-    Node<State>* node, const State& state, mpi::communicator world, bool only_eat)
+    shared_ptr<Node<State>> node, const State& state, mpi::communicator world, bool only_eat)
 {
     torch::Tensor policy, value;
     std::tie(policy, value) = distribute_policy_value(state.tensor(), world);
@@ -220,7 +219,7 @@ float evaluate(
 }
 template <typename State>
 float evaluate(
-    Node<State>* node, const State& state, PolicyValueNet& network, bool only_eat)
+    shared_ptr<Node<State>> node, const State& state, PolicyValueNet& network, bool only_eat)
 {
     torch::Tensor policy, value;
     std::tie(policy, value) = network.policy_value(state.tensor());
@@ -241,7 +240,7 @@ float evaluate(
 
 template <typename State>
 void backpropagate(
-    Node<State>* leaf, int to_play, float value)
+    shared_ptr<Node<State>> leaf, int to_play, float value)
 {
     while (leaf != nullptr) {
         leaf->value_sum += leaf->player_to_move == to_play ? value : (1.0 - value);
@@ -251,7 +250,7 @@ void backpropagate(
 }
 
 template <typename State>
-typename State::Move run_mcts_distribute(Node<State>* root, const State& state, mpi::communicator world, const int steps, bool only_eat = false)
+typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps, bool only_eat = false)
 {
     assert(!root->expanded());
     assert(root != nullptr);
@@ -275,7 +274,7 @@ typename State::Move run_mcts_distribute(Node<State>* root, const State& state, 
     return root->best_action(steps, true).first;
 }
 template <typename State>
-typename State::Move run_mcts(Node<State>* root, const State& state, PolicyValueNet& netowrk, const int steps, bool only_eat = false)
+typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& netowrk, const int steps, bool only_eat = false)
 {
     assert(!root->expanded());
     assert(root != nullptr);
@@ -298,4 +297,3 @@ typename State::Move run_mcts(Node<State>* root, const State& state, PolicyValue
     return root->best_action(steps).first;
 }
 }
-#endif

@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <errno.h>
 #include <iostream>
+#include <memory>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -14,6 +15,7 @@
 
 #define PORT 8999
 #define BUFFER 2048
+using MCTS::Node;
 
 SurakartaState::Move fromsocket(int fd)
 {
@@ -87,6 +89,7 @@ int main()
             send(fd, static_cast<const void*>("1"), static_cast<size_t>(1), 0);
 
         int steps = 0;
+        auto root = std::make_shared<Node<SurakartaState>>(state.player_to_move);
         while (state.has_moves()) {
             cout << endl
                  << "State: " << state << endl;
@@ -95,8 +98,7 @@ int main()
             if (should_move) {
                 while (true) {
                     try {
-                        MCTS::Node<SurakartaState> root(state.player_to_move);
-                        move = MCTS::run_mcts(&root, state, network, steps / 2);
+                        move = MCTS::run_mcts(root, state, network, steps / 2);
                         std::cout << "we move: " << move;
                         state.do_move(move);
                         tosocket(fd, move);
@@ -118,6 +120,7 @@ int main()
                     }
                 }
             }
+            root = root->get_child(move);
             should_move = !should_move;
             ++steps;
         }

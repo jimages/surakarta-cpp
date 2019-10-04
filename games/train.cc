@@ -21,6 +21,7 @@
 #include <functional>
 #include <iostream>
 #include <iterator>
+#include <memory>
 #include <numeric>
 #include <omp.h>
 #include <random>
@@ -34,11 +35,11 @@ using MCTS::Node;
 using MCTS::run_mcts_distribute;
 namespace mpi = boost::mpi;
 
-torch::Tensor get_statistc(Node<SurakartaState>* node)
+torch::Tensor get_statistc(std::shared_ptr<Node<SurakartaState>> node)
 {
     torch::Tensor prob = torch::zeros({ SURAKARTA_ACTION }, torch::kFloat);
     float total = std::accumulate((node->children).begin(), (node->children).end(), 0.0,
-        [](const float l, const std::pair<SurakartaState::Move, Node<SurakartaState>*>& r) { return l + r.second->visits; });
+        [](const float l, const Node<SurakartaState>::move_node_tuple& r) { return l + r.second->visits; });
     for (auto i = (node->children).begin(); i != (node->children).end(); ++i) {
         prob[move2index(i->first)] = i->second->visits / total;
     }
@@ -301,13 +302,13 @@ void worker()
         // OK let's play game!
         size_t count = 0;
         SurakartaState game;
+        auto root = std::make_shared<Node<SurakartaState>>(game.player_to_move);
         bool only_eat;
         while (!game.terminal() && game.has_moves(count > THRESHOLD_ONLY_EAT) && count < GAME_LIMIT) {
             only_eat = count > THRESHOLD_ONLY_EAT;
-            Node<SurakartaState> root(game.player_to_move);
             auto board = game.tensor();
             unsigned int equal_count = 0;
-            auto move = run_mcts_distribute(&root, game, world, count / 2, only_eat);
+            auto move = run_mcts_distribute(root, game, world, count / 2, only_eat);
             // for long situation.
             for (int i = b.size(0) - 2; i >= 0; i -= 2) {
                 if (board[0].slice(0, 0, 2).to(torch::kBool).equal(b[i].slice(0, 0, 2).to(torch::kBool))) {
@@ -321,11 +322,12 @@ void worker()
             }
         out:
             b = at::cat({ b, board }, 0);
-            p = at::cat({ p, get_statistc(&root) }, 0);
+            p = at::cat({ p, get_statistc(root) }, 0);
             if (equal_count >= LONG_SITUATION_THRESHOLD)
                 goto finish;
             // if in long situation. exit.
             game.do_move(move);
+            root = root->get_child(move);
             ++count;
         }
     finish:

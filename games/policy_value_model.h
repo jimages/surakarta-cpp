@@ -1,5 +1,4 @@
-#ifndef POLICY_VALUE_MODEL_H
-#define POLICY_VALUE_MODEL_H
+#pragma once
 #include <torch/torch.h>
 #include <utility>
 inline torch::nn::Conv2dOptions conv_options(int64_t in_planes, int64_t out_planes, int64_t kerner_size,
@@ -84,4 +83,3 @@ struct PolicyValueNet {
 private:
     torch::Device device { torch::kCPU };
 };
-#endif // POLICY_VALUE_MODEL_H

@@ -1,5 +1,4 @@
-#ifndef CONSTANT_H
-#define CONSTANT_H
+#pragma once
 
 // 自对弈总局数
 #define GAME 50000000
@@ -37,5 +36,3 @@
 #define THRESHOLD_ONLY_EAT 300
 
 #define LONG_SITUATION_THRESHOLD 3
-
-#endif // CONSTANT_H

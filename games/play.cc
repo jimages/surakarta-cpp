@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <errno.h>
 #include <iostream>
+#include <memory>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -13,6 +14,9 @@
 #include <utility>
 #include <vector>
 
+using MCTS::Node;
+using std::make_shared;
+using std::shared_ptr;
 int main()
 {
     try {
@@ -29,16 +33,15 @@ int main()
             network.load_model("value_policy.pt");
         state.player_to_move = 1;
         int steps = 0;
+        shared_ptr<Node<SurakartaState>> root = make_shared<Node<SurakartaState>>(state.player_to_move);
         while (state.has_moves()) {
             cout << endl
                  << "State: " << state << endl;
-
             SurakartaState::Move move = SurakartaState::no_move;
             if (should_move) {
                 while (true) {
                     try {
-                        MCTS::Node<SurakartaState> root(state.player_to_move);
-                        move = MCTS::run_mcts(&root, state, network, steps / 2);
+                        move = MCTS::run_mcts(root, state, network, steps / 2);
                         std::cout << "alphazero move: " << move;
                         state.do_move(move);
                         break;
@@ -61,6 +64,7 @@ int main()
                     }
                 }
             }
+            root = root->get_child(move);
             should_move = !should_move;
             ++steps;
         }
