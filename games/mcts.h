@@ -79,7 +79,7 @@ public:
     using move_node_tuple = typename decltype(children)::value_type;
     const Move move;
     const int player_to_move;
-    shared_ptr<Node<State>> parent;
+    Node<State>* parent = nullptr;
 
     int visits = 0;
     float value_sum = 0.0;
@@ -142,14 +142,13 @@ public:
     {
         auto node = std::make_shared<Node>(player2move, move, this, prior);
         children[move] = node;
-        assert(!children.empty());
 
         return node;
     }
     shared_ptr<Node<State>> get_child(const Move& move)
     {
         auto p = children.at(move);
-        p->parent.reset();
+        p->parent = nullptr;
         return p;
     }
 
@@ -240,8 +239,9 @@ float evaluate(
 
 template <typename State>
 void backpropagate(
-    shared_ptr<Node<State>> leaf, int to_play, float value)
+    shared_ptr<Node<State>> l, int to_play, float value)
 {
+    auto leaf = l.get();
     while (leaf != nullptr) {
         leaf->value_sum += leaf->player_to_move == to_play ? value : (1.0 - value);
         leaf->visits++;
@@ -252,8 +252,8 @@ void backpropagate(
 template <typename State>
 typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps, bool only_eat = false)
 {
-    assert(!root->expanded());
     assert(root != nullptr);
+    assert(root->parent == nullptr);
 
     evaluate(root, state, world, only_eat);
     root->add_exploration_noise();
@@ -276,8 +276,8 @@ typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const Sta
 template <typename State>
 typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& netowrk, const int steps, bool only_eat = false)
 {
-    assert(!root->expanded());
     assert(root != nullptr);
+    assert(root->parent == nullptr);
 
     evaluate(root, state, netowrk, only_eat);
 
