@@ -100,7 +100,7 @@ int main(int argc, char* argv[])
     };
 
     // Get the options.
-    while ((ch = getopt_long(argc, argv, "hnhsf", longopts, NULL)) != -1) {
+    while ((ch = getopt_long(argc, argv, "hnmhsf", longopts, NULL)) != -1) {
         switch (ch) {
         case '?':
         case 'h':
@@ -213,6 +213,9 @@ int main(int argc, char* argv[])
                             m = MCTS::run_mcts(root, state, network, steps / 2);
                             std::cout << "alphazero move: " << m;
                         }
+                        std::cout << '\n';
+                        std::ostream_iterator<SurakartaState::Move> outiter(std::cout, ", ");
+                        std::copy(state.get_moves().begin(), state.get_moves().end(), outiter);
 
                         if (root->children.empty()) {
                             MCTS::evaluate(root, state, network);

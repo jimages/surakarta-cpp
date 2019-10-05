@@ -73,19 +73,22 @@ void SurakartaState::do_move(Move move, bool is_human)
     player_to_move = 3 - player_to_move;
     return;
 }
-void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const
+void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter, bool only_eat) const
 {
     // now we check can we eat something.
+    bool flag = false;
     decltype(inner_loop)::const_iterator iters[2];
     int n = find_all(true, x, y, iters);
     for (auto i = 0; i < n; ++i) {
         auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), iters[i]);
         if (move.is_activated) {
             inserter = move;
+            flag |= true;
         }
         move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(iters[i]) - 1);
         if (move.is_activated) {
             inserter = move;
+            flag |= true;
         }
     }
     n = find_all(false, x, y, iters);
@@ -93,12 +96,17 @@ void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Mo
         auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), iters[i]);
         if (move.is_activated) {
             inserter = move;
+            flag |= true;
         }
         move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(iters[i]) - 1);
         if (move.is_activated) {
             inserter = move;
+            flag |= true;
         }
     }
+
+    if (only_eat && flag)
+        return;
 
     // get all valiable moves.
     for (const auto& direc : directions) {
@@ -108,10 +116,10 @@ void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Mo
     }
 }
 // Get all available move.
-std::vector<SurakartaState::Move>& SurakartaState::get_moves() const
+std::vector<SurakartaState::Move>& SurakartaState::get_moves(bool only_eat) const
 {
     PR_ASSERT();
-    if (has_get_moves) {
+    if (has_get_moves && this->only_eat == only_eat) {
         return moves;
     } else {
         // 利用局部性原理，在用的时候清除
@@ -119,52 +127,13 @@ std::vector<SurakartaState::Move>& SurakartaState::get_moves() const
         for (auto row = 0; row < BOARD_SIZE; ++row)
             for (auto col = 0; col < BOARD_SIZE; ++col) {
                 if (board[row * BOARD_SIZE + col] == player_chess[player_to_move]) {
-                    get_valid_move(col, row, back_inserter(moves));
+                    get_valid_move(col, row, back_inserter(moves), only_eat);
                 }
             }
         has_get_moves = true;
+        this->only_eat = only_eat;
         return moves;
     }
-}
-bool SurakartaState::can_eat(
-    const decltype(inner_loop)::const_iterator begin,
-    const decltype(inner_loop)::const_iterator end,
-    decltype(inner_loop)::const_iterator curr,
-    decltype(inner_loop)::const_iterator tart) const
-{
-    auto former = curr > tart ? tart : curr;
-    auto latter = curr > tart ? curr : tart;
-    bool flag_former = true;
-    bool flag_latter = true;
-    // check from former to later.
-    for (auto i = former + 1; i != latter; ++i) {
-        if (i == end)
-            i = begin;
-        // if the former is begin()
-        if (i == latter)
-            break;
-        if ((board[i->second * BOARD_SIZE + i->first] != ChessType::Null) && *i != *curr && *i != *tart) {
-            flag_former = false;
-            break;
-        }
-    }
-    if (flag_former)
-        return true;
-    else {
-        // check from latter to former if necessary.
-        for (auto i = latter + 1; i != former; ++i) {
-            if (i == end)
-                i = begin;
-            // if the former is begin()
-            if (i == former)
-                break;
-            if ((board[i->second * BOARD_SIZE + i->first] != ChessType::Null) && *i != *curr && *i != *tart) {
-                flag_latter = false;
-                break;
-            }
-        }
-    }
-    return flag_former | flag_latter;
 }
 // get the winner if we have, return player[0] otherwise.
 int SurakartaState::get_winner() const

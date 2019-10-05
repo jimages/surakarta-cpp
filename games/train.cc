@@ -303,10 +303,11 @@ void worker()
         size_t count = 0;
         SurakartaState game;
         auto root = std::make_shared<Node<SurakartaState>>(game.player_to_move);
-        while (!game.terminal() && game.has_moves() && count < GAME_LIMIT) {
+        bool eat_only = false;
+        while (!game.terminal() && game.has_moves(eat_only) && count < GAME_LIMIT) {
             auto board = game.tensor();
             unsigned int equal_count = 0;
-            auto move = run_mcts_distribute(root, game, world, count / 2);
+            auto move = run_mcts_distribute(root, game, world, count / 2, eat_only);
             // for long situation.
             for (int i = b.size(0) - 2; i >= 0; i -= 2) {
                 if (board[0].slice(0, 0, 2).to(torch::kBool).equal(b[i].slice(0, 0, 2).to(torch::kBool))) {
@@ -323,10 +324,12 @@ void worker()
             p = at::cat({ p, get_statistc(root) }, 0);
             if (equal_count >= LONG_SITUATION_THRESHOLD)
                 goto finish;
+
             // if in long situation. exit.
             game.do_move(move);
             root = root->get_child(move);
             ++count;
+            eat_only = (count / 2) > THRESHOLD_ONLY_EAT;
         }
     finish:
         // play 1 or 2, 0 for draw

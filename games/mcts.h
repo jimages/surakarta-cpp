@@ -202,7 +202,7 @@ inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const tor
 
 template <typename State>
 float evaluate(
-    shared_ptr<Node<State>> node, const State& state, mpi::communicator world)
+    shared_ptr<Node<State>> node, const State& state, mpi::communicator world, bool only_eat)
 {
     torch::Tensor policy, value;
     std::tie(policy, value) = distribute_policy_value(state.tensor(), world);
@@ -210,7 +210,7 @@ float evaluate(
     // 确认是否进入了cpu
     assert(policy.device() == torch::kCPU);
     assert(value.device() == torch::kCPU);
-    auto& moves = state.get_moves();
+    auto& moves = state.get_moves(only_eat);
     float policy_sum = std::accumulate(moves.begin(), moves.end(), 0.0f, [&policy](float l, const typename State::Move& move) { return l + policy[0][move2index(move)].template item<float>(); });
 
     for (auto& move : moves) {
@@ -254,12 +254,12 @@ void backpropagate(
 }
 
 template <typename State>
-typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps)
+typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps, bool eat_only)
 {
     assert(root != nullptr);
     assert(root->parent == nullptr);
 
-    evaluate(root, state, world);
+    evaluate(root, state, world, eat_only);
     root->add_exploration_noise();
 
     for (int i = 0; i < SIMULATION; ++i) {
@@ -271,7 +271,7 @@ typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const Sta
             std::tie(move, node) = node->best_child();
             game.do_move(move);
         }
-        float value = evaluate(node, game, world);
+        float value = evaluate(node, game, world, eat_only);
         backpropagate(node, game.player_to_move, value);
     }
 

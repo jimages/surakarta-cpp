@@ -93,9 +93,9 @@ public:
 
     torch::Tensor tensor() const;
 
-    bool has_moves() const
+    bool has_moves(bool eat_only = false) const
     {
-        return !get_moves().empty();
+        return !get_moves(eat_only).empty();
     }
 
     // Get the result of the match.
@@ -109,7 +109,7 @@ public:
             return 1.0;
     }
 
-    std::vector<Move>& get_moves() const;
+    std::vector<Move>& get_moves(bool only_eat = false) const;
     int get_winner() const;
     bool terminal() const;
 
@@ -119,6 +119,7 @@ private:
 
     static const vector<pair<int, int>> directions;
     mutable bool has_get_moves = false;
+    mutable bool only_eat = false;
     mutable std::vector<Move> moves;
 
     size_t find_all(bool is_inner, int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const;
@@ -127,17 +128,20 @@ private:
         const decltype(inner_loop)::const_iterator end,
         decltype(inner_loop)::const_iterator curr,
         decltype(inner_loop)::const_iterator tart) const;
-    void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const;
+    void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter, bool only_eat = false) const;
 
     template <typename T>
     Move get_valid_eat_one_direction(T begin, T end, const T pos) const
     {
         uint_fast32_t has_passed_arc = false;
         T next;
-        for (auto i = pos; i != pos; ++i) {
-            if (i == end)
+        T i = pos;
+        do {
+            // 设定next的棋子位置。
+            if (i == end) {
                 i = begin;
-            if (i == end - 1) {
+                next = begin + 1;
+            } else if (i == end - 1) {
                 next = begin;
             } else {
                 next = i + 1;
@@ -148,20 +152,22 @@ private:
                 return { 1, { pos->first, pos->second }, { i->first, i->second } };
             }
 
-            // 如果途径了空棋子的地方。
-            if (board[BOARD_SIZE * i->second + i->first] == ChessType::Null) {
-                if (!has_passed_arc && arc_map[pair2index(*i)] && arc_map[pair2index(*next)])
-                    has_passed_arc = true;
-            } else {
-                if (*i == *pos)
+            // next所指向的位置是否经过了环。
+            if (!has_passed_arc && arc_map[pair2index(*i)] && arc_map[pair2index(*next)])
+                has_passed_arc = true;
+
+            if (board[pair2index(*i)] != ChessType::Null) {
+                // 如果途径了有棋子的地方,如果是棋子是自己，则跳过，否则退出。
+                if (*i == *pos) {
+                    ++i;
                     continue;
-                else
+                } else
                     return { 0, { pos->first, pos->second }, { i->first, i->second } };
             }
+            i = next;
 
-            if (next == pos)
-                break;
-        }
+        } while (next != pos);
+
         return { 0, { pos->first, pos->second }, { pos->first, pos->second } };
     }
 
