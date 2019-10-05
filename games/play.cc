@@ -158,7 +158,7 @@ int main(int argc, char* argv[])
             src_addr.sin_addr.s_addr = INADDR_ANY;
             src_addr.sin_port = htons(PORT);
 
-            socklen_t addrlen = sizeof(src_addr);
+            socklen_t addrlen = sizeof(struct sockaddr_in);
             if (bind(serverfd, (struct sockaddr*)&src_addr, sizeof(src_addr)) < 0) {
                 perror(strerror(errno));
                 exit(EXIT_FAILURE);
@@ -171,6 +171,8 @@ int main(int argc, char* argv[])
                 perror(strerror(errno));
                 exit(EXIT_FAILURE);
             }
+            std::cout << "Accept connection from: " << inet_ntoa(des_addr.sin_addr)
+                      << "  port: " << ntohs(des_addr.sin_port) << '\n';
 
             // send the signal to the opponent.
             if (counter_first)
@@ -179,10 +181,10 @@ int main(int argc, char* argv[])
 
         int steps = 0;
         shared_ptr<Node<SurakartaState>> root = make_shared<Node<SurakartaState>>(state.player_to_move);
+        SurakartaState::Move move = SurakartaState::no_move;
         while (state.has_moves()) {
             cout << endl
                  << "State: " << state << endl;
-            SurakartaState::Move move = SurakartaState::no_move;
             if (should_move) {
                 while (true) {
                     try {
