@@ -46,7 +46,11 @@
 #endif // NDEBUG
 
 // mcts simulation in match mode.
+#ifdef NDEBUG
 #define SIMULATION_MATCH 2000
+#else
+#define SIMULATION_MATCH 800
+#endif
 
 //
 //
@@ -198,7 +202,7 @@ inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const tor
 
 template <typename State>
 float evaluate(
-    shared_ptr<Node<State>> node, const State& state, mpi::communicator world, bool only_eat = false)
+    shared_ptr<Node<State>> node, const State& state, mpi::communicator world)
 {
     torch::Tensor policy, value;
     std::tie(policy, value) = distribute_policy_value(state.tensor(), world);
@@ -206,7 +210,7 @@ float evaluate(
     // 确认是否进入了cpu
     assert(policy.device() == torch::kCPU);
     assert(value.device() == torch::kCPU);
-    auto& moves = state.get_moves(only_eat);
+    auto& moves = state.get_moves();
     float policy_sum = std::accumulate(moves.begin(), moves.end(), 0.0f, [&policy](float l, const typename State::Move& move) { return l + policy[0][move2index(move)].template item<float>(); });
 
     for (auto& move : moves) {
@@ -218,11 +222,11 @@ float evaluate(
 }
 template <typename State>
 float evaluate(
-    shared_ptr<Node<State>> node, const State& state, PolicyValueNet& network, bool only_eat = false)
+    shared_ptr<Node<State>> node, const State& state, PolicyValueNet& network)
 {
     torch::Tensor policy, value;
     std::tie(policy, value) = network.policy_value(state.tensor());
-    auto& moves = state.get_moves(only_eat);
+    auto& moves = state.get_moves();
     float policy_sum = std::accumulate(moves.begin(), moves.end(), 0.0f, [&policy](float l, const typename State::Move& move) { return l + policy[0][move2index(move)].template item<float>(); });
 
     for (auto& move : moves) {
@@ -250,12 +254,12 @@ void backpropagate(
 }
 
 template <typename State>
-typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps, bool only_eat = false)
+typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps)
 {
     assert(root != nullptr);
     assert(root->parent == nullptr);
 
-    evaluate(root, state, world, only_eat);
+    evaluate(root, state, world);
     root->add_exploration_noise();
 
     for (int i = 0; i < SIMULATION; ++i) {
@@ -267,19 +271,20 @@ typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const Sta
             std::tie(move, node) = node->best_child();
             game.do_move(move);
         }
-        float value = evaluate(node, game, world, only_eat);
+        float value = evaluate(node, game, world);
         backpropagate(node, game.player_to_move, value);
     }
 
     return root->best_action(steps, 1.0).first;
 }
 template <typename State>
-typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& netowrk, const int steps, bool only_eat = false)
+typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& netowrk, const int steps)
 {
     assert(root != nullptr);
     assert(root->parent == nullptr);
 
-    evaluate(root, state, netowrk, only_eat);
+    if (root->children.empty())
+        evaluate(root, state, netowrk);
 
     for (int i = 0; i < SIMULATION_MATCH; ++i) {
         auto node = root;
@@ -290,7 +295,7 @@ typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, 
             std::tie(move, node) = node->best_child();
             game.do_move(move);
         }
-        float value = evaluate(node, game, netowrk, only_eat);
+        float value = evaluate(node, game, netowrk);
         backpropagate(node, game.player_to_move, value);
     }
 

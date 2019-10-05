@@ -13,7 +13,7 @@
 #include <vector>
 
 const char SurakartaState::player_markers[] = { '*', 'R', 'B' };
-const SurakartaState::Move SurakartaState::no_move = { 0, { 0, 0 }, { 0, 0 }, false };
+const SurakartaState::Move SurakartaState::no_move = { 0, { 0, 0 }, { 0, 0 } };
 const SurakartaState::ChessType SurakartaState::player_chess[] = { SurakartaState::ChessType::Null, SurakartaState::ChessType::Red, SurakartaState::ChessType::Black };
 const std::vector<std::pair<int, int>> SurakartaState::outer_loop = { { 1, 0 }, { 0, 1 }, { 1, 1 },
     { 2, 1 }, { 3, 1 }, { 4, 1 }, { 5, 1 }, { 4, 0 }, { 4, 1 }, { 4, 2 }, { 4, 3 }, { 4, 4 }, { 4, 5 },
@@ -58,118 +58,60 @@ void SurakartaState::do_move(Move move, bool is_human)
     assert(board[pair2index(move.target)] != player_chess[player_to_move]);
 
     if (is_human) {
-        if (board[pair2index(move.target)] == ChessType::Null) {
-            // we check the available position
-            const auto& current = move.current;
-            const auto& target = move.target;
-
-            if (!(current.first >= 0 && current.second >= 0 && target.first >= 0
-                    && target.second >= 0 && current.first < 6 && current.second < 6
-                    && target.first < 6 && target.second < 6))
-                throw runtime_error("下的位置不合法");
-
-            if ((abs(current.first - target.first) > 1)
-                || (abs(current.second - target.second) > 1))
-                throw runtime_error("下的位置不合法");
-
-            board[pair2index(target)] = player_chess[player_to_move];
-            board[pair2index(current)] = ChessType::Null;
-
-        } else if (board[pair2index(move.target)]
-            == player_chess[3 - player_to_move]) {
-            // check can we eat the certain postion
-
-            // check the current position
-            auto cur_pos_out = find_all(outer_loop.cbegin(), outer_loop.cend(),
-                std::make_pair(move.current.first, move.current.second));
-            auto cur_pos_inn = find_all(inner_loop.cbegin(), inner_loop.cend(),
-                std::make_pair(move.current.first, move.current.second));
-
-            // check the target position.
-            auto tar_pos_out = find_all(outer_loop.cbegin(), outer_loop.cend(),
-                std::make_pair(move.target.first, move.target.second));
-            auto tar_pos_inn = find_all(inner_loop.cbegin(), inner_loop.cend(),
-                std::make_pair(move.target.first, move.target.second));
-
-            for (auto cur_out : cur_pos_out) {
-                for (auto tar_out : tar_pos_out) {
-                    if (can_eat(outer_loop.cbegin(), outer_loop.cend(), cur_out, tar_out)) {
-                        board[tar_out->second * BOARD_SIZE + tar_out->first] = player_chess[player_to_move];
-                        board[cur_out->second * BOARD_SIZE + cur_out->first] = ChessType::Null;
-                        goto success;
-                    }
-                }
-            }
-            for (auto cur : cur_pos_inn) {
-                for (auto tar : tar_pos_inn) {
-                    if (can_eat(inner_loop.cbegin(), inner_loop.cend(), cur, tar)) {
-                        board[pair2index(*tar)] = player_chess[player_to_move];
-                        board[pair2index(*cur)] = ChessType::Null;
-                        goto success;
-                    }
-                }
-            }
-            throw runtime_error("下的位置不合法");
-        } else {
-            throw runtime_error("下的位置不合法");
-        }
+        auto moves = get_moves();
+        if (std::find(moves.begin(), moves.end(), move) == moves.end())
+            throw std::runtime_error("下棋的位置不合法");
+        board[pair2index(move.target)] = player_chess[player_to_move];
+        board[pair2index(move.current)] = ChessType::Null;
     } else {
         board[pair2index(move.target)] = player_chess[player_to_move];
         board[pair2index(move.current)] = ChessType::Null;
     }
 
-success:
     has_get_moves = false;
     last_move = move;
     player_to_move = 3 - player_to_move;
     return;
 }
-void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter, bool only_eat) const
+void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const
 {
     // now we check can we eat something.
-    bool flag = 0;
     decltype(inner_loop)::const_iterator iters[2];
     int n = find_all(true, x, y, iters);
     for (auto i = 0; i < n; ++i) {
         auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), iters[i]);
         if (move.is_activated) {
-            inserter = std::move(move);
-            flag |= 1;
+            inserter = move;
         }
         move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(iters[i]) - 1);
         if (move.is_activated) {
-            inserter = std::move(move);
-            flag |= 1;
+            inserter = move;
         }
     }
     n = find_all(false, x, y, iters);
     for (auto i = 0; i < n; ++i) {
         auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), iters[i]);
         if (move.is_activated) {
-            inserter = std::move(move);
-            flag |= 1;
+            inserter = move;
         }
         move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(iters[i]) - 1);
         if (move.is_activated) {
-            inserter = std::move(move);
-            flag |= 1;
+            inserter = move;
         }
     }
-    if (flag && only_eat)
-        return;
 
     // get all valiable moves.
     for (const auto& direc : directions) {
         if (x + direc.first < 6 && x + direc.first >= 0 && y + direc.second < 6 && y + direc.second >= 0 && board[BOARD_SIZE * (y + direc.second) + x + direc.first] == ChessType::Null) {
-            inserter = { 1, { x, y }, { x + direc.first, y + direc.second }, false };
+            inserter = { 1, { x, y }, { x + direc.first, y + direc.second } };
         }
     }
 }
 // Get all available move.
-std::vector<SurakartaState::Move>& SurakartaState::get_moves(bool only_eat) const
+std::vector<SurakartaState::Move>& SurakartaState::get_moves() const
 {
     PR_ASSERT();
-    if (has_get_moves && this->only_eat == only_eat) {
+    if (has_get_moves) {
         return moves;
     } else {
         // 利用局部性原理，在用的时候清除
@@ -177,11 +119,10 @@ std::vector<SurakartaState::Move>& SurakartaState::get_moves(bool only_eat) cons
         for (auto row = 0; row < BOARD_SIZE; ++row)
             for (auto col = 0; col < BOARD_SIZE; ++col) {
                 if (board[row * BOARD_SIZE + col] == player_chess[player_to_move]) {
-                    get_valid_move(col, row, back_inserter(moves), only_eat);
+                    get_valid_move(col, row, back_inserter(moves));
                 }
             }
         has_get_moves = true;
-        this->only_eat = only_eat;
         return moves;
     }
 }
@@ -260,6 +201,8 @@ bool SurakartaState::terminal() const
     }
     return false;
 }
+
+// 检查在内外环上有几个对于的吃子的位置
 size_t SurakartaState::find_all(bool is_inner, int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const
 {
     const int_fast16_t* map;

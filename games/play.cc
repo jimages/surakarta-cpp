@@ -217,7 +217,9 @@ int main(int argc, char* argv[])
                         if (root->children.empty()) {
                             MCTS::evaluate(root, state, network);
                         }
-                        state.do_move(m);
+                        assert(state.get_moves().size() == root->children.size());
+                        assert(state.player_to_move == root->player_to_move);
+                        state.do_move(m, true);
                         move = m;
                         break;
                     } catch (std::exception& e) {

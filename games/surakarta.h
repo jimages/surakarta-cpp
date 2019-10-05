@@ -39,6 +39,11 @@ using std::vector;
     assert((move).target.first >= 0 && move.target.second < BOARD_SIZE);
 #define PR_ASSERT() assert(player_to_move == 1 || player_to_move == 2)
 
+inline size_t pair2index(const std::pair<int, int>& pair)
+{
+    return BOARD_SIZE * pair.second + pair.first;
+}
+
 class SurakartaState {
 public:
     enum ChessType : char { Red = 1,
@@ -47,7 +52,6 @@ public:
     struct surakarta_move {
         bool is_activated; // is the movable
         pair<int, int> current, target;
-        bool is_eat;
     };
     typedef surakarta_move Move;
 
@@ -89,9 +93,9 @@ public:
 
     torch::Tensor tensor() const;
 
-    bool has_moves(bool only_eat = false) const
+    bool has_moves() const
     {
-        return !get_moves(only_eat).empty();
+        return !get_moves().empty();
     }
 
     // Get the result of the match.
@@ -105,7 +109,7 @@ public:
             return 1.0;
     }
 
-    std::vector<Move>& get_moves(bool only_eat = false) const;
+    std::vector<Move>& get_moves() const;
     int get_winner() const;
     bool terminal() const;
 
@@ -115,7 +119,6 @@ private:
 
     static const vector<pair<int, int>> directions;
     mutable bool has_get_moves = false;
-    mutable bool only_eat = false;
     mutable std::vector<Move> moves;
 
     size_t find_all(bool is_inner, int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const;
@@ -124,14 +127,14 @@ private:
         const decltype(inner_loop)::const_iterator end,
         decltype(inner_loop)::const_iterator curr,
         decltype(inner_loop)::const_iterator tart) const;
-    void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter, bool only_eat) const;
+    void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const;
 
     template <typename T>
     Move get_valid_eat_one_direction(T begin, T end, T pos) const
     {
         uint8_t has_passed_arc = false;
         T next;
-        for (auto i = pos + 1; i != pos; ++i) {
+        for (auto i = pos; i != pos; ++i) {
             if (i == end)
                 i = begin;
             if (i == end - 1) {
@@ -139,21 +142,24 @@ private:
             } else {
                 next = i + 1;
             }
-            if (i == pos)
-                break;
-            if (has_passed_arc && board[BOARD_SIZE * i->second + i->first] == player_chess[3 - player_to_move]) {
-                return { 1, { pos->first, pos->second }, { i->first, i->second }, true };
+
+            // 当遇到对方棋子的时候，如果转了弯，则吃掉对方。
+            if (has_passed_arc && board[pair2index(*i)] == player_chess[3 - player_to_move]) {
+                return { 1, { pos->first, pos->second }, { i->first, i->second } };
             } else if (board[BOARD_SIZE * i->second + i->first] == ChessType::Null) {
-                if (!has_passed_arc && arc_map[i->first + i->second * BOARD_SIZE] && arc_map[next->first + next->second * BOARD_SIZE])
+                if (!has_passed_arc && arc_map[pair2index(*i)] && arc_map[pair2index(*next)])
                     has_passed_arc = true;
             } else {
                 if (*i == *pos)
                     continue;
                 else
-                    return { 0, { pos->first, pos->second }, { i->first, i->second }, true };
+                    return { 0, { pos->first, pos->second }, { i->first, i->second } };
             }
+
+            if (next == pos)
+                break;
         }
-        return { 0, { pos->first, pos->second }, { pos->first, pos->second }, false };
+        return { 0, { pos->first, pos->second }, { pos->first, pos->second } };
     }
 
     template <class InputIt, class T>
@@ -217,6 +223,10 @@ inline bool operator!=(const SurakartaState::Move lhs, const SurakartaState::Mov
 {
     return !(lhs.is_activated == rhs.is_activated && lhs.current == rhs.current && lhs.target == rhs.target);
 }
+inline bool operator==(const SurakartaState::Move lhs, const SurakartaState::Move rhs)
+{
+    return (lhs.is_activated == rhs.is_activated && lhs.current == rhs.current && lhs.target == rhs.target);
+}
 
 inline bool operator<(const SurakartaState::Move lhs, const SurakartaState::Move rhs)
 {
@@ -241,11 +251,6 @@ inline bool operator<(const SurakartaState::Move lhs, const SurakartaState::Move
     // if all are the same.
     return false;
 }
-inline size_t pair2index(const std::pair<int, int>& pair)
-{
-    return BOARD_SIZE * pair.second + pair.first;
-}
-
 inline size_t move2index(const SurakartaState::Move& move)
 {
     MV_ASSERT(move);
