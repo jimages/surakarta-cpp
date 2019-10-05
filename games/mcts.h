@@ -110,15 +110,15 @@ public:
                 const move_node_tuple& b) { return a.second->ucb_score() < b.second->ucb_score(); });
     }
 
-    move_node_tuple best_action(uint_fast32_t steps, bool is_selfplay = false) const
+    move_node_tuple best_action(uint_fast32_t steps, double temp = 1.0) const
     {
         assert(!children.empty());
         std::vector<move_node_tuple> v(children.begin(), children.end());
-        if (steps <= 30 && is_selfplay) {
+        if (temp > 1e-2) {
 
             std::vector<double> w;
             w.reserve(v.size());
-            std::transform(v.begin(), v.end(), std::back_inserter(w), [](const move_node_tuple& r) { return r.second->visits; });
+            std::transform(v.begin(), v.end(), std::back_inserter(w), [temp](const move_node_tuple& r) { return std::pow(r.second->visits, 1.0 / temp + 1e-10); });
 
             // get the action
             std::random_device dev;
@@ -198,7 +198,7 @@ inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const tor
 
 template <typename State>
 float evaluate(
-    shared_ptr<Node<State>> node, const State& state, mpi::communicator world, bool only_eat)
+    shared_ptr<Node<State>> node, const State& state, mpi::communicator world, bool only_eat = false)
 {
     torch::Tensor policy, value;
     std::tie(policy, value) = distribute_policy_value(state.tensor(), world);
@@ -218,7 +218,7 @@ float evaluate(
 }
 template <typename State>
 float evaluate(
-    shared_ptr<Node<State>> node, const State& state, PolicyValueNet& network, bool only_eat)
+    shared_ptr<Node<State>> node, const State& state, PolicyValueNet& network, bool only_eat = false)
 {
     torch::Tensor policy, value;
     std::tie(policy, value) = network.policy_value(state.tensor());
@@ -271,7 +271,7 @@ typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const Sta
         backpropagate(node, game.player_to_move, value);
     }
 
-    return root->best_action(steps, true).first;
+    return root->best_action(steps, 1.0).first;
 }
 template <typename State>
 typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& netowrk, const int steps, bool only_eat = false)
@@ -294,6 +294,6 @@ typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, 
         backpropagate(node, game.player_to_move, value);
     }
 
-    return root->best_action(steps).first;
+    return root->best_action(steps, 0.1).first;
 }
 }

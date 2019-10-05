@@ -215,7 +215,7 @@ inline ostream& operator<<(ostream& out, const SurakartaState::Move& move)
 }
 inline bool operator!=(const SurakartaState::Move lhs, const SurakartaState::Move rhs)
 {
-    return !(lhs.is_activated && rhs.is_activated && lhs.current == rhs.current && lhs.target == rhs.target);
+    return !(lhs.is_activated == rhs.is_activated && lhs.current == rhs.current && lhs.target == rhs.target);
 }
 
 inline bool operator<(const SurakartaState::Move lhs, const SurakartaState::Move rhs)

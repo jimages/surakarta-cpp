@@ -74,7 +74,9 @@ auto human_action(const SurakartaState::Move& m) -> SurakartaState::Move
 SurakartaState::Move network_action(const int fd, const SurakartaState::Move& m)
 {
     SurakartaState::Move move;
-    tosocket(fd, m);
+    if (m != SurakartaState::no_move) {
+        tosocket(fd, m);
+    }
     move = fromsocket(fd);
     std::cout << "the network opponent move: " << move;
     return move;
@@ -212,6 +214,9 @@ int main(int argc, char* argv[])
                             std::cout << "alphazero move: " << m;
                         }
 
+                        if (root->children.empty()) {
+                            MCTS::evaluate(root, state, network);
+                        }
                         state.do_move(m);
                         move = m;
                         break;
