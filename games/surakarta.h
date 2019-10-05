@@ -130,9 +130,9 @@ private:
     void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const;
 
     template <typename T>
-    Move get_valid_eat_one_direction(T begin, T end, T pos) const
+    Move get_valid_eat_one_direction(T begin, T end, const T pos) const
     {
-        uint8_t has_passed_arc = false;
+        uint_fast32_t has_passed_arc = false;
         T next;
         for (auto i = pos; i != pos; ++i) {
             if (i == end)
@@ -146,7 +146,10 @@ private:
             // 当遇到对方棋子的时候，如果转了弯，则吃掉对方。
             if (has_passed_arc && board[pair2index(*i)] == player_chess[3 - player_to_move]) {
                 return { 1, { pos->first, pos->second }, { i->first, i->second } };
-            } else if (board[BOARD_SIZE * i->second + i->first] == ChessType::Null) {
+            }
+
+            // 如果途径了空棋子的地方。
+            if (board[BOARD_SIZE * i->second + i->first] == ChessType::Null) {
                 if (!has_passed_arc && arc_map[pair2index(*i)] && arc_map[pair2index(*next)])
                     has_passed_arc = true;
             } else {
