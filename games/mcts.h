@@ -189,23 +189,26 @@ private:
 
 /////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////
-inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const torch::Tensor& state, mpi::communicator world)
+inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const torch::Tensor& state, mpi::communicator world, double& diff)
 {
     std::string str;
     std::pair<std::string, std::string> data;
     int rank = world.rank();
+    auto t = omp_get_wtime();
     world.send(rank % (EVA_SERVER_NUM) + 1, 3, torch_serialize(state));
     world.recv(rank % (EVA_SERVER_NUM) + 1, 4, data);
+    auto e = omp_get_wtime();
+    diff += (e - t);
 
     return { torch_deserialize(data.first).unsqueeze(0), torch_deserialize(data.second).unsqueeze(0) };
 }
 
 template <typename State>
 float evaluate(
-    shared_ptr<Node<State>> node, const State& state, mpi::communicator world, bool only_eat)
+    shared_ptr<Node<State>> node, const State& state, mpi::communicator world, bool only_eat, double& diff)
 {
     torch::Tensor policy, value;
-    std::tie(policy, value) = distribute_policy_value(state.tensor(), world);
+    std::tie(policy, value) = distribute_policy_value(state.tensor(), world, diff);
 
     // 确认是否进入了cpu
     assert(policy.device() == torch::kCPU);
@@ -254,12 +257,12 @@ void backpropagate(
 }
 
 template <typename State>
-typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps, bool eat_only)
+typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps, bool eat_only, double& diff)
 {
     assert(root != nullptr);
     assert(root->parent == nullptr);
 
-    evaluate(root, state, world, eat_only);
+    evaluate(root, state, world, eat_only, diff);
     root->add_exploration_noise();
 
     for (int i = 0; i < SIMULATION; ++i) {
@@ -271,7 +274,7 @@ typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const Sta
             std::tie(move, node) = node->best_child();
             game.do_move(move);
         }
-        float value = evaluate(node, game, world, eat_only);
+        float value = evaluate(node, game, world, eat_only, diff);
         backpropagate(node, game.player_to_move, value);
     }
 
