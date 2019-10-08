@@ -27,6 +27,7 @@ void usage()
               << "Usage:\n"
               << "     -h --help               Print this message\n"
               << "     -n                      Play with with network opponent\n"
+              << "     -t                      Play with with network opponent, the opponent decide the who is first.\n"
               << "     -m                      Play with human in the console [default]\n"
               << "     -s                      self play\n"
               << "     -f                      The opponent play first\n"
@@ -86,7 +87,9 @@ int main(int argc, char* argv[])
 {
 
     int ch;
+    char buffer[BUFFER];
     bool counter_first = false;
+    bool opponent_decide_who_first = false;
     bool in_network = false;
     bool selfplay = false;
     bool human = true;
@@ -100,13 +103,17 @@ int main(int argc, char* argv[])
     };
 
     // Get the options.
-    while ((ch = getopt_long(argc, argv, "hnmhsf", longopts, NULL)) != -1) {
+    while ((ch = getopt_long(argc, argv, "hnmhtsf", longopts, NULL)) != -1) {
         switch (ch) {
         case '?':
         case 'h':
             usage();
             std::exit(EXIT_SUCCESS);
             break;
+        case 't':
+            std::cout << "play in target-decision net play mode\n";
+            opponent_decide_who_first = true;
+            // -t is also a network mode. so we don't break.
         case 'n':
             std::cout << "play in net play mode\n";
             in_network = true;
@@ -177,8 +184,16 @@ int main(int argc, char* argv[])
                       << "  port: " << ntohs(des_addr.sin_port) << '\n';
 
             // send the signal to the opponent.
-            if (counter_first)
-                send(fd, static_cast<const void*>("1"), static_cast<size_t>(1), 0);
+            if (opponent_decide_who_first) {
+                auto s = recv(fd, buffer, 1, 0);
+                buffer[s] = '\0';
+                counter_first = !std::atoi(buffer);
+                should_move = !counter_first;
+                std::cout << "The target decision is: " << counter_first << '\n';
+            } else {
+                if (counter_first)
+                    send(fd, static_cast<const void*>("1"), static_cast<size_t>(1), 0);
+            }
         }
 
         int steps = 0;
