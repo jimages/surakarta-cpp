@@ -250,7 +250,7 @@ void backpropagate(
 {
     auto leaf = l.get();
     while (leaf != nullptr) {
-        leaf->value_sum += leaf->player_to_move == to_play ? value : (1.0 - value);
+        leaf->value_sum += leaf->player_to_move == to_play ? value : - value;
         leaf->visits++;
         leaf = leaf->parent;
     }
