@@ -54,8 +54,7 @@ NetImpl::NetImpl()
     // 价值网络
     , val_conv1(register_module("val_conv1", torch::nn::Conv2d(Conv2dOptions(256, 2, 1))))
     , val_bat1(register_module("val_bat1", torch::nn::BatchNorm(torch::nn::BatchNormOptions(2))))
-    , val_fc1(register_module("val_fc1", torch::nn::Linear(2 * width * height, 256)))
-    , val_fc2(register_module("val_fc2", torch::nn::Linear(256, 1)))
+    , val_fc1(register_module("val_fc1", torch::nn::Linear(2 * width * height, 1)))
 
 {
     for (int i = 0; i <= 5; ++i) {
@@ -77,8 +76,7 @@ std::pair<torch::Tensor, torch::Tensor> NetImpl::forward(torch::Tensor x)
 
     // 价值网络
     auto x_val = torch::relu(val_bat1->forward(val_conv1->forward(x)));
-    x_val = torch::relu(val_fc1->forward(x_val.view({ -1, 2 * width * height })));
-    x_val = torch::tanh(val_fc2->forward(x_val));
+    x_val = torch::tanh(val_fc1->forward(x_val.view({ -1, 2 * width * height })));
 
     return { x_pol, x_val };
 }
