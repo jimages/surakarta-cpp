@@ -24,12 +24,19 @@
 #include <memory>
 #include <numeric>
 #include <omp.h>
+#include <pthread.h>
 #include <random>
 #include <string>
 #include <torch/torch.h>
 #include <tuple>
 #include <utility>
 #include <vector>
+
+#ifdef SCHED_BATCH
+#define SCHEDULE SCHED_BATCH
+#else
+#define SCHEDULE SCHED_OTHER
+#endif
 
 using MCTS::Node;
 using MCTS::run_mcts_distribute;
@@ -364,6 +371,11 @@ void worker()
 
 int main(int argc, char* argv[])
 {
+    // 这种进程的调度
+    pthread_t pthd = pthread_self();
+    struct sched_param param;
+    param.sched_priority = 0;
+    pthread_setschedparam(pthd, SCHEDULE, &param);
     mpi::environment env(argc, argv);
     mpi::communicator world;
     auto rank = world.rank();
