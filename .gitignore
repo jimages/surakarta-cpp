@@ -54,3 +54,5 @@ build-debug/
 
 # the mac files
 *.DS_Store
+
+*.log
