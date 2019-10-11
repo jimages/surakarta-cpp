@@ -322,8 +322,9 @@ shared_ptr<Node<State>> mcts_thread(shared_ptr<Node<State>> root, const State& s
     if (root->children.empty())
         evaluate(root, state, network);
     root->mtx.unlock();
+    auto time = omp_get_wtime();
 
-    for (int i = 0; i < SIMULATION_MATCH; ++i) {
+    for (int i = 0; (omp_get_wtime() - time) < 10; ++i) {
         auto node = root;
         auto game = state;
 
@@ -351,6 +352,7 @@ typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, 
     for (auto& r : root_future) {
         r.get();
     }
+    std::cout << root->visits / 10.0 << "/s\n";
     return root->best_action(steps).first;
 }
 }
