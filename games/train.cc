@@ -24,12 +24,19 @@
 #include <memory>
 #include <numeric>
 #include <omp.h>
+#include <pthread.h>
 #include <random>
 #include <string>
 #include <torch/torch.h>
 #include <tuple>
 #include <utility>
 #include <vector>
+
+#ifdef SCHED_BATCH
+#define SCHEDULE SCHED_BATCH
+#else
+#define SCHEDULE SCHED_OTHER
+#endif
 
 using MCTS::Node;
 using MCTS::run_mcts_distribute;
@@ -367,7 +374,7 @@ int main(int argc, char* argv[])
 {
     mpi::environment env(argc, argv, mt::multiple);
     if (env.thread_level() < mt::multiple) {
-        std::cerr << "unsupported thread level.\n";
+        std::cerr << "unsupport the thread environment.\n";
         env.abort(-1);
     }
     mpi::communicator world;
