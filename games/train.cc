@@ -34,6 +34,7 @@
 using MCTS::Node;
 using MCTS::run_mcts_distribute;
 namespace mpi = boost::mpi;
+namespace mt = mpi::threading;
 
 torch::Tensor get_statistc(std::shared_ptr<Node<SurakartaState>> node)
 {
@@ -364,7 +365,11 @@ void worker()
 
 int main(int argc, char* argv[])
 {
-    mpi::environment env(argc, argv);
+    mpi::environment env(argc, argv, mt::multiple);
+    if (env.thread_level() < mt::multiple) {
+        std::cerr << "unsupported thread level.\n";
+        env.abort(-1);
+    }
     mpi::communicator world;
     auto rank = world.rank();
     std::ios::sync_with_stdio(false);

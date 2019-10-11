@@ -47,7 +47,7 @@
 
 // mcts simulation in match mode.
 #ifdef NDEBUG
-#define SIMULATION_MATCH 2000
+#define SIMULATION_MATCH 20000
 #else
 #define SIMULATION_MATCH 800
 #endif
@@ -124,11 +124,25 @@ public:
             w.reserve(v.size());
             std::transform(v.begin(), v.end(), std::back_inserter(w), [temp](const move_node_tuple& r) { return std::pow(r.second->visits, 1.0 / temp + 1e-10); });
 
+            double total = std::accumulate(children.begin(), children.end(), 0.0, [](double l, move_node_tuple r) { return l + r.second->visits; });
+            double total_t = std::accumulate(w.begin(), w.end(), 0.0);
+
+            std::cout << "total: " << total << '\n';
+            for (int i = 0; i < v.size(); ++i) {
+                std::cout << "move:" << v[i].first << "  visits:" << v[i].second->visits
+                          << "  ratio:" << w[i] / total_t << "  p:" << v[i].second->P
+                          << "  v:" << v[i].second->value_sum / v[i].second->visits << '\n';
+            }
+
             // get the action
             std::random_device dev;
             std::mt19937 rd(dev());
             std::discrete_distribution<> dd(w.begin(), w.end());
             long ac_idx = dd(rd);
+
+            std::cout << "we chouse move:" << v[ac_idx].first << "  visits:" << v[ac_idx].second->visits
+                      << "  ratio:" << w[ac_idx] / total_t
+                      << "  p:" << v[ac_idx].second->P << "  v:" << v[ac_idx].second->value_sum / v[ac_idx].second->visits << '\n';
             return v[ac_idx];
         } else {
             return *std::max_element(children.begin(), children.end(),
@@ -137,7 +151,8 @@ public:
         }
     }
 
-    bool expanded() const
+    bool
+    expanded() const
     {
         return !(children.empty());
     }
@@ -250,7 +265,7 @@ void backpropagate(
 {
     auto leaf = l.get();
     while (leaf != nullptr) {
-        leaf->value_sum += leaf->player_to_move == to_play ? value : (1.0 - value);
+        leaf->value_sum += leaf->player_to_move == to_play ? value : -value;
         leaf->visits++;
         leaf = leaf->parent;
     }
