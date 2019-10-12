@@ -1,5 +1,4 @@
 #pragma once
-#include <cassert>
 //
 // Zachary Wang 2019
 // jiamges123@gmail.com
@@ -19,6 +18,7 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/mpi.hpp>
 #include <boost/serialization/utility.hpp>
+#include <cassert>
 #include <cmath>
 #include <cstdlib>
 #include <future>
@@ -39,7 +39,7 @@
 #include "helper.h"
 #include "policy_value_model.h"
 
-#define PB_C_BASE 19652.0f
+#define PB_C_BASE 1599.0f
 #define PB_C_INIT 1.25f
 #ifdef NDEBUG
 #define SIMULATION 800
@@ -115,7 +115,12 @@ public:
     move_node_tuple best_child()
     {
         std::lock_guard<std::recursive_mutex> g(mtx);
+
+        // it look we lost n games.
         visits += VIRTUAL_LOSS;
+        value_sum -= VIRTUAL_LOSS;
+        Q = value_sum / visits;
+
         assert(!children.empty());
         return *std::max_element(children.begin(), children.end(),
             [](const move_node_tuple& a,
@@ -183,8 +188,8 @@ public:
     {
         assert(parent != nullptr);
 
-        // float pb_c = std::log((static_cast<float>(parent->visits) + PB_C_BASE + 1) / PB_C_BASE) + PB_C_INIT;
-        float pb_c = 5.0;
+        float pb_c = std::log((static_cast<float>(parent->visits) + PB_C_BASE + 1) / PB_C_BASE) + PB_C_INIT;
+        //float pb_c = 5.0;
         pb_c *= std::sqrt(static_cast<float>(parent->visits)) / (static_cast<float>(visits) + 1);
 
         return pb_c * P + Q;
@@ -244,6 +249,7 @@ float evaluate(
 
     return value.item<float>();
 }
+
 template <typename State>
 float evaluate(
     shared_ptr<Node<State>> node, const State& state, PolicyValueNet& network)
@@ -280,7 +286,7 @@ void backpropagate(
 
     while (leaf != nullptr) {
         leaf->mtx.lock();
-        leaf->value_sum += leaf->player_to_move == to_play ? value : -value;
+        leaf->value_sum += (leaf->player_to_move == to_play ? value : -value) + VIRTUAL_LOSS;
         leaf->visits -= (VIRTUAL_LOSS - 1);
         leaf->Q = leaf->value_sum / leaf->visits;
         leaf->mtx.unlock();
@@ -343,7 +349,7 @@ template <typename State>
 typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& network, const int steps)
 {
     vector<future<shared_ptr<Node<State>>>> root_future;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         auto func = [root, state, &network, steps]() -> shared_ptr<Node<State>> {
             return mcts_thread(root, state, network, steps);
         };
@@ -353,6 +359,6 @@ typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, 
         r.get();
     }
     std::cout << root->visits / 10.0 << "/s\n";
-    return root->best_action(steps).first;
+    return root->best_action(steps, 0.2).first;
 }
 }

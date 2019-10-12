@@ -32,12 +32,6 @@
 #include <utility>
 #include <vector>
 
-#ifdef SCHED_BATCH
-#define SCHEDULE SCHED_BATCH
-#else
-#define SCHEDULE SCHED_OTHER
-#endif
-
 using MCTS::Node;
 using MCTS::run_mcts_distribute;
 namespace mpi = boost::mpi;
