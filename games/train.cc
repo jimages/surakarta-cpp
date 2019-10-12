@@ -32,12 +32,6 @@
 #include <utility>
 #include <vector>
 
-#ifdef SCHED_BATCH
-#define SCHEDULE SCHED_BATCH
-#else
-#define SCHEDULE SCHED_OTHER
-#endif
-
 using MCTS::Node;
 using MCTS::run_mcts_distribute;
 namespace mpi = boost::mpi;
@@ -351,7 +345,8 @@ void worker()
         auto v = torch::zeros({ size }, torch::kFloat);
         if (winner != 0) {
             for (int i = 0; i < size; ++i) {
-                v[i] = (i % 2 + 1) == winner ? 1.0F : -1.0F;
+                // 第一个开始的局面为2，为对方的人。
+                v[i] = (i % 2 + 2) == winner ? 1.0F : -1.0F;
             }
         }
         std::array<std::string, 3> dataset;
