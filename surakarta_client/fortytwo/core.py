@@ -1,6 +1,3 @@
-from nemesis.search import SearchConfig, SearchType
-from nemesis.build_search import build
-from nemesis.tactics import Tactics
 from surakarta.chess import Chess
 from surakarta.game import Game
 import threading
