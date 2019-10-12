@@ -351,7 +351,8 @@ void worker()
         auto v = torch::zeros({ size }, torch::kFloat);
         if (winner != 0) {
             for (int i = 0; i < size; ++i) {
-                v[i] = (i % 2 + 1) == winner ? 1.0F : -1.0F;
+                // 第一个开始的局面为2，为对方的人。
+                v[i] = (i % 2 + 2) == winner ? 1.0F : -1.0F;
             }
         }
         std::array<std::string, 3> dataset;
