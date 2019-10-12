@@ -305,13 +305,12 @@ void worker()
         size_t count = 0;
         SurakartaState game;
         auto root = std::make_shared<Node<SurakartaState>>(game.player_to_move);
-        bool eat_only = false;
         auto s_time = omp_get_wtime();
         double diff = 0.0;
-        while (!game.terminal() && game.has_moves(eat_only) && count < GAME_LIMIT) {
+        while (!game.terminal() && game.has_moves() && count < GAME_LIMIT) {
             auto board = game.tensor();
             unsigned int equal_count = 0;
-            auto move = run_mcts_distribute(root, game, world, count / 2, eat_only, diff);
+            auto move = run_mcts_distribute(root, game, world, count / 2);
             // for long situation.
             for (int i = b.size(0) - 2; i >= 0; i -= 2) {
                 if (board[0].slice(0, 0, 2).to(torch::kBool).equal(b[i].slice(0, 0, 2).to(torch::kBool))) {
@@ -333,22 +332,18 @@ void worker()
             game.do_move(move);
             root = root->get_child(move);
             ++count;
-            eat_only = (count / 2) > THRESHOLD_ONLY_EAT;
         }
     finish:
-        auto e_time = omp_get_wtime();
-        std::cout << "\ntotal game time is:" << e_time - s_time << "  diff time is:" << diff << '\n';
-
         // play 1 or 2, 0 for draw
         int winner = game.get_winner();
         int size = b.size(0);
         auto v = torch::zeros({ size }, torch::kFloat);
         if (winner != 0) {
             for (int i = 0; i < size; ++i) {
-                // 第一个开始的局面为2，为对方的人。
-                v[i] = (i % 2 + 2) == winner ? 1.0F : -1.0F;
+                v[i] = (i % 2 + 1) == winner ? 1.0F : -1.0F;
             }
         }
+
         std::array<std::string, 3> dataset;
         dataset[0] = torch_serialize(b);
         dataset[1] = torch_serialize(p);

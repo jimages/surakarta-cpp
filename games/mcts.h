@@ -197,6 +197,7 @@ public:
 
     void add_exploration_noise()
     {
+        mtx.lock();
         assert(!children.empty());
         std::random_device dev;
         std::mt19937 rd(dev());
@@ -204,6 +205,7 @@ public:
         for (auto i = children.begin(); i != children.end(); ++i) {
             i->second->P = i->second->P * 0.75 + gamma(rd) * 0.25;
         }
+        mtx.unlock();
     }
 
 private:
@@ -211,35 +213,32 @@ private:
 
 /////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////
-inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const torch::Tensor& state, mpi::communicator world, double& diff)
+inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const torch::Tensor& state, mpi::communicator world)
 {
     std::string str;
     std::pair<std::string, std::string> data;
     int rank = world.rank();
-    auto t = omp_get_wtime();
     world.send(rank % (EVA_SERVER_NUM) + 1, 3, torch_serialize(state));
     world.recv(rank % (EVA_SERVER_NUM) + 1, 4, data);
-    auto e = omp_get_wtime();
-    diff += (e - t);
 
     return { torch_deserialize(data.first).unsqueeze(0), torch_deserialize(data.second).unsqueeze(0) };
 }
 
 template <typename State>
 float evaluate(
-    shared_ptr<Node<State>> node, const State& state, mpi::communicator world, bool only_eat, double& diff)
+    shared_ptr<Node<State>> node, const State& state, mpi::communicator world)
 {
     torch::Tensor policy, value;
-    std::tie(policy, value) = distribute_policy_value(state.tensor(), world, diff);
+    std::tie(policy, value) = distribute_policy_value(state.tensor(), world);
 
     // 确认是否进入了cpu
     assert(policy.device() == torch::kCPU);
     assert(value.device() == torch::kCPU);
-    auto& moves = state.get_moves(only_eat);
+    auto& moves = state.get_moves();
     float policy_sum = std::accumulate(moves.begin(), moves.end(), 0.0f, [&policy](float l, const typename State::Move& move) { return l + policy[0][move2index(move)].template item<float>(); });
 
     node->mtx.lock();
-    if (node->expanded()) {
+    if (!node->expanded()) {
         for (auto& move : moves) {
             // First we get the location from policy.
             node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>() / policy_sum);
@@ -295,12 +294,12 @@ void backpropagate(
 }
 
 template <typename State>
-typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps, bool eat_only, double& diff)
+typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps)
 {
     assert(root != nullptr);
     assert(root->parent == nullptr);
 
-    evaluate(root, state, world, eat_only, diff);
+    evaluate(root, state, world);
     root->add_exploration_noise();
 
     for (int i = 0; i < SIMULATION; ++i) {
@@ -312,7 +311,7 @@ typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const Sta
             std::tie(move, node) = node->best_child();
             game.do_move(move);
         }
-        float value = evaluate(node, game, world, eat_only, diff);
+        float value = evaluate(node, game, world);
         backpropagate(node, game.player_to_move, value);
     }
 
