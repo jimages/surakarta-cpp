@@ -373,11 +373,6 @@ void worker()
 
 int main(int argc, char* argv[])
 {
-    // 这种进程的调度
-    pthread_t pthd = pthread_self();
-    struct sched_param param;
-    param.sched_priority = 0;
-    pthread_setschedparam(pthd, SCHEDULE, &param);
     mpi::environment env(argc, argv, mt::multiple);
     if (env.thread_level() < mt::multiple) {
         std::cerr << "unsupport the thread environment.\n";

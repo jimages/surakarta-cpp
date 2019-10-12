@@ -27,9 +27,11 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <random>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <torch/torch.h>
 #include <vector>
 
@@ -47,7 +49,7 @@
 
 // mcts simulation in match mode.
 #ifdef NDEBUG
-#define SIMULATION_MATCH 2000
+#define SIMULATION_MATCH 20000
 #else
 #define SIMULATION_MATCH 800
 #endif
@@ -64,8 +66,10 @@
 
 namespace mpi = boost::mpi;
 namespace MCTS {
+using std::async;
 using std::cerr;
 using std::endl;
+using std::future;
 using std::shared_ptr;
 using std::size_t;
 using std::vector;
@@ -85,9 +89,12 @@ public:
     const int player_to_move;
     Node<State>* parent = nullptr;
 
+    std::recursive_mutex mtx;
+
     int visits = 0;
     float value_sum = 0.0;
     float P = 0.0;
+    double Q = 0.0;
 
     Node(int to_move, float prior = 0.0)
         : move(State::no_move)
@@ -99,15 +106,16 @@ public:
         : move(move_)
         , player_to_move(player_to_move)
         , parent(parent_)
-        , visits(0)
         , P(prior)
     {
     }
 
     Node(const Node&) = delete;
 
-    move_node_tuple best_child() const
+    move_node_tuple best_child()
     {
+        std::lock_guard<std::recursive_mutex> g(mtx);
+        visits += VIRTUAL_LOSS;
         assert(!children.empty());
         return *std::max_element(children.begin(), children.end(),
             [](const move_node_tuple& a,
@@ -129,6 +137,20 @@ public:
             std::mt19937 rd(dev());
             std::discrete_distribution<> dd(w.begin(), w.end());
             long ac_idx = dd(rd);
+#ifndef NDEBUG
+            double total = std::accumulate(children.begin(), children.end(), 0.0, [](double l, move_node_tuple r) { return l + r.second->visits; });
+            double total_t = std::accumulate(w.begin(), w.end(), 0.0);
+            std::cout << "total: " << total << '\n';
+            for (int i = 0; i < v.size(); ++i) {
+                std::cout << "move:" << v[i].first << "  visits:" << v[i].second->visits
+                          << "  ratio:" << w[i] / total_t << "  p:" << v[i].second->P
+                          << "  v:" << v[i].second->value_sum / v[i].second->visits << '\n';
+            }
+
+            std::cout << "we chouse move:" << v[ac_idx].first << "  visits:" << v[ac_idx].second->visits
+                      << "  ratio:" << w[ac_idx] / total_t
+                      << "  p:" << v[ac_idx].second->P << "  v:" << v[ac_idx].second->value_sum / v[ac_idx].second->visits << '\n';
+#endif
             return v[ac_idx];
         } else {
             return *std::max_element(children.begin(), children.end(),
@@ -137,7 +159,8 @@ public:
         }
     }
 
-    bool expanded() const
+    bool
+    expanded() const
     {
         return !(children.empty());
     }
@@ -156,21 +179,15 @@ public:
         return p;
     }
 
-    float value() const
-    {
-        if (visits == 0)
-            return 0;
-        return value_sum / visits;
-    }
-
     float ucb_score() const
     {
         assert(parent != nullptr);
 
-        float pb_c = std::log((static_cast<float>(parent->visits) + PB_C_BASE + 1) / PB_C_BASE) + PB_C_INIT;
-        pb_c *= std::sqrt(static_cast<float>(parent->visits) / (static_cast<float>(visits) + 1));
+        // float pb_c = std::log((static_cast<float>(parent->visits) + PB_C_BASE + 1) / PB_C_BASE) + PB_C_INIT;
+        float pb_c = 5.0;
+        pb_c *= std::sqrt(static_cast<float>(parent->visits)) / (static_cast<float>(visits) + 1);
 
-        return pb_c * P + value();
+        return pb_c * P + Q;
     }
 
     void add_exploration_noise()
@@ -216,10 +233,14 @@ float evaluate(
     auto& moves = state.get_moves(only_eat);
     float policy_sum = std::accumulate(moves.begin(), moves.end(), 0.0f, [&policy](float l, const typename State::Move& move) { return l + policy[0][move2index(move)].template item<float>(); });
 
-    for (auto& move : moves) {
-        // First we get the location from policy.
-        node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>() / policy_sum);
+    node->mtx.lock();
+    if (node->expanded()) {
+        for (auto& move : moves) {
+            // First we get the location from policy.
+            node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>() / policy_sum);
+        }
     }
+    node->mtx.unlock();
 
     return value.item<float>();
 }
@@ -249,9 +270,20 @@ void backpropagate(
     shared_ptr<Node<State>> l, int to_play, float value)
 {
     auto leaf = l.get();
+    // for leaf node.
+    leaf->mtx.lock();
+    leaf->value_sum += leaf->player_to_move == to_play ? value : -value;
+    leaf->visits += 1;
+    leaf->Q = leaf->value_sum / leaf->visits;
+    leaf->mtx.unlock();
+    leaf = leaf->parent;
+
     while (leaf != nullptr) {
+        leaf->mtx.lock();
         leaf->value_sum += leaf->player_to_move == to_play ? value : -value;
-        leaf->visits++;
+        leaf->visits -= (VIRTUAL_LOSS - 1);
+        leaf->Q = leaf->value_sum / leaf->visits;
+        leaf->mtx.unlock();
         leaf = leaf->parent;
     }
 }
@@ -281,27 +313,46 @@ typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const Sta
     return root->best_action(steps, 1.0).first;
 }
 template <typename State>
-typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& netowrk, const int steps)
+shared_ptr<Node<State>> mcts_thread(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& network, const int steps)
 {
     assert(root != nullptr);
     assert(root->parent == nullptr);
 
+    root->mtx.lock();
     if (root->children.empty())
-        evaluate(root, state, netowrk);
+        evaluate(root, state, network);
+    root->mtx.unlock();
+    auto time = omp_get_wtime();
 
-    for (int i = 0; i < SIMULATION_MATCH; ++i) {
+    for (int i = 0; (omp_get_wtime() - time) < 10; ++i) {
         auto node = root;
         auto game = state;
 
         while (node->expanded()) {
+            std::lock_guard<std::recursive_mutex> g(node->mtx);
             typename State::Move move;
             std::tie(move, node) = node->best_child();
             game.do_move(move);
         }
-        float value = evaluate(node, game, netowrk);
+        float value = evaluate(node, game, network);
         backpropagate(node, game.player_to_move, value);
     }
-
-    return root->best_action(steps, 0.1).first;
+    return root;
+}
+template <typename State>
+typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& network, const int steps)
+{
+    vector<future<shared_ptr<Node<State>>>> root_future;
+    for (int i = 0; i < 2; i++) {
+        auto func = [root, state, &network, steps]() -> shared_ptr<Node<State>> {
+            return mcts_thread(root, state, network, steps);
+        };
+        root_future.push_back(async(std::launch::async, func));
+    }
+    for (auto& r : root_future) {
+        r.get();
+    }
+    std::cout << root->visits / 10.0 << "/s\n";
+    return root->best_action(steps).first;
 }
 }
