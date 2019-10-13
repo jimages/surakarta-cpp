@@ -305,8 +305,6 @@ void worker()
         size_t count = 0;
         SurakartaState game;
         auto root = std::make_shared<Node<SurakartaState>>(game.player_to_move);
-        auto s_time = omp_get_wtime();
-        double diff = 0.0;
         while (!game.terminal() && game.has_moves() && count < GAME_LIMIT) {
             auto board = game.tensor();
             unsigned int equal_count = 0;
