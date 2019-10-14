@@ -275,7 +275,7 @@ void backpropagate(
     auto leaf = l.get();
     // for leaf node.
     leaf->mtx.lock();
-    leaf->value_sum += leaf->player_to_move == to_play ? value : -value;
+    leaf->value_sum += leaf->player_to_move == to_play ? -value : value;
     leaf->visits += 1;
     leaf->Q = leaf->value_sum / leaf->visits;
     leaf->mtx.unlock();
@@ -283,7 +283,7 @@ void backpropagate(
 
     while (leaf != nullptr) {
         leaf->mtx.lock();
-        leaf->value_sum += (leaf->player_to_move == to_play ? value : -value) + VIRTUAL_LOSS;
+        leaf->value_sum += (leaf->player_to_move == to_play ? -value : value) + VIRTUAL_LOSS;
         leaf->visits -= (VIRTUAL_LOSS - 1);
         leaf->Q = leaf->value_sum / leaf->visits;
         leaf->mtx.unlock();
@@ -325,9 +325,8 @@ shared_ptr<Node<State>> mcts_thread(shared_ptr<Node<State>> root, const State& s
     if (root->children.empty())
         evaluate(root, state, network);
     root->mtx.unlock();
-    auto time = omp_get_wtime();
 
-    for (int i = 0; (omp_get_wtime() - time) < 10; ++i) {
+    for (int i = 0; i < SIMULATION_MATCH; ++i) {
         auto node = root;
         auto game = state;
 
