@@ -142,6 +142,8 @@ public:
             std::mt19937 rd(dev());
             std::discrete_distribution<> dd(w.begin(), w.end());
             long ac_idx = dd(rd);
+
+#ifndef NDEBUG
             double total = std::accumulate(children.begin(), children.end(), 0.0, [](double l, move_node_tuple r) { return l + r.second->visits; });
             double total_t = std::accumulate(w.begin(), w.end(), 0.0);
             std::cout << "total: " << total << '\n';
@@ -154,6 +156,7 @@ public:
             std::cout << "we chouse move:" << v[ac_idx].first << "  visits:" << v[ac_idx].second->visits
                       << "  ratio:" << w[ac_idx] / total_t
                       << "  p:" << v[ac_idx].second->P << "  v:" << v[ac_idx].second->value_sum / v[ac_idx].second->visits << '\n';
+#endif
             return v[ac_idx];
         } else {
             return *std::max_element(children.begin(), children.end(),
