@@ -142,7 +142,6 @@ public:
             std::mt19937 rd(dev());
             std::discrete_distribution<> dd(w.begin(), w.end());
             long ac_idx = dd(rd);
-#ifndef NDEBUG
             double total = std::accumulate(children.begin(), children.end(), 0.0, [](double l, move_node_tuple r) { return l + r.second->visits; });
             double total_t = std::accumulate(w.begin(), w.end(), 0.0);
             std::cout << "total: " << total << '\n';
@@ -155,7 +154,6 @@ public:
             std::cout << "we chouse move:" << v[ac_idx].first << "  visits:" << v[ac_idx].second->visits
                       << "  ratio:" << w[ac_idx] / total_t
                       << "  p:" << v[ac_idx].second->P << "  v:" << v[ac_idx].second->value_sum / v[ac_idx].second->visits << '\n';
-#endif
             return v[ac_idx];
         } else {
             return *std::max_element(children.begin(), children.end(),
@@ -347,14 +345,24 @@ shared_ptr<Node<State>> mcts_thread(shared_ptr<Node<State>> root, const State& s
 template <typename State>
 typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& network, const int steps)
 {
+    std::mutex mtx;
+    std::exception_ptr exception;
     vector<future<shared_ptr<Node<State>>>> root_future;
     for (int i = 0; i < 3; i++) {
-        auto func = [root, state, &network, steps]() -> shared_ptr<Node<State>> {
-            return mcts_thread(root, state, network, steps);
+        auto func = [root, state, &network, steps, &mtx, &exception]() -> shared_ptr<Node<State>> {
+            try {
+                return mcts_thread(root, state, network, steps);
+            } catch (...) {
+                std::lock_guard<std::mutex> guard(mtx);
+                exception = std::current_exception();
+            }
         };
         root_future.push_back(async(std::launch::async, func));
     }
     for (auto& r : root_future) {
+        if (exception) {
+            std::rethrow_exception(exception);
+        }
         r.get();
     }
     std::cout << root->visits / 10.0 << "/s\n";
