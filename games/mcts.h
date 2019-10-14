@@ -127,7 +127,7 @@ public:
                 const move_node_tuple& b) { return a.second->ucb_score() < b.second->ucb_score(); });
     }
 
-    move_node_tuple best_action(uint_fast32_t steps, double temp = 1.0) const
+    move_node_tuple best_action(uint_fast32_t steps, double temp = 1.0, bool is_play = false) const
     {
         assert(!children.empty());
         std::vector<move_node_tuple> v(children.begin(), children.end());
@@ -143,20 +143,20 @@ public:
             std::discrete_distribution<> dd(w.begin(), w.end());
             long ac_idx = dd(rd);
 
-#ifndef NDEBUG
-            double total = std::accumulate(children.begin(), children.end(), 0.0, [](double l, move_node_tuple r) { return l + r.second->visits; });
-            double total_t = std::accumulate(w.begin(), w.end(), 0.0);
-            std::cout << "total: " << total << '\n';
-            for (int i = 0; i < v.size(); ++i) {
-                std::cout << "move:" << v[i].first << "\tvisits:" << v[i].second->visits
-                          << "\tratio:" << w[i] / total_t << "\t\tp:" << v[i].second->P
-                          << "\t\tv:" << v[i].second->value_sum / v[i].second->visits << '\n';
-            }
+            if (is_play) {
+                double total = std::accumulate(children.begin(), children.end(), 0.0, [](double l, move_node_tuple r) { return l + r.second->visits; });
+                double total_t = std::accumulate(w.begin(), w.end(), 0.0);
+                std::cout << "total: " << total << '\n';
+                for (int i = 0; i < v.size(); ++i) {
+                    std::cout << "move:" << v[i].first << "\tvisits:" << v[i].second->visits
+                              << "\tratio:" << w[i] / total_t << "\t\tp:" << v[i].second->P
+                              << "\t\tv:" << v[i].second->value_sum / v[i].second->visits << '\n';
+                }
 
-            std::cout << "we chouse move:" << v[ac_idx].first << "  visits:" << v[ac_idx].second->visits
-                      << "  ratio:" << w[ac_idx] / total_t
-                      << "  p:" << v[ac_idx].second->P << "  v:" << v[ac_idx].second->value_sum / v[ac_idx].second->visits << '\n';
-#endif
+                std::cout << "we chouse move:" << v[ac_idx].first << "  visits:" << v[ac_idx].second->visits
+                          << "  ratio:" << w[ac_idx] / total_t
+                          << "  p:" << v[ac_idx].second->P << "  v:" << v[ac_idx].second->value_sum / v[ac_idx].second->visits << '\n';
+            }
             return v[ac_idx];
         } else {
             return *std::max_element(children.begin(), children.end(),
@@ -370,6 +370,6 @@ typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, 
         r.get();
     }
     std::cout << root->visits / 10.0 << "/s\n";
-    return root->best_action(steps, 0.2).first;
+    return root->best_action(steps, 0.2, true).first;
 }
 }
