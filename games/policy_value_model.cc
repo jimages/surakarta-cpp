@@ -1,8 +1,5 @@
 #include "policy_value_model.h"
 #include <iostream>
-#ifdef USE_CUDA
-#include <torch/nn/parallel/data_parallel.h>
-#endif
 #include <torch/torch.h>
 #include <utility>
 
@@ -125,17 +122,18 @@ PolicyValueNet::~PolicyValueNet()
 }
 
 /*
- * 获得输入一个batch的棋局batsh，获得policy和value，采用数据并行模式。
+ * 获得输入一个batch的棋局batsh，获得policy和value
  */
 std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::policy_value(const torch::Tensor states)
 {
+    torch::TensorOptions options;
+    torch::Tensor tgt;
+    options = options.device(device).dtype(torch::kFloat32);
+    tgt = states.to(options);
+
     model->eval();
 
-#ifdef USE_CUDA
-    auto result = torch::nn::parallel::data_parallel(model, states, torch::nullopt, torch::Device(torch::kCPU));
-#else
-    auto result = model->forward(states);
-#endif
+    auto result = model->forward(tgt);
 
     return { result.first.cpu(), result.second.cpu() };
 }
@@ -157,15 +155,7 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(torch::Tensor
     optimizer->zero_grad();
 
     torch::Tensor act_prob, value;
-#ifdef USE_CUDA
-    if (torch::cuda::is_available()) {
-        std::tie(act_prob, value) = torch::nn::parallel::data_parallel(model, states_batch);
-    } else {
-        std::tie(act_prob, value) = model->forward(states_batch);
-    }
-#else
     std::tie(act_prob, value) = model->forward(states_batch);
-#endif
 
     auto value_loss = mse_loss(value.view({ -1 }), winner_batch);
     auto prob_loss = -mean(sum(mcts_probs * torch::log_softmax(act_prob, 1), 1), kFloat32);
