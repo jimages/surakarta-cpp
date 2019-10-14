@@ -51,7 +51,7 @@
 #ifdef NDEBUG
 #define SIMULATION_MATCH 20000
 #else
-#define SIMULATION_MATCH 800
+#define SIMULATION_MATCH 1500
 #endif
 
 //
@@ -259,10 +259,12 @@ float evaluate(
     auto& moves = state.get_moves();
     float policy_sum = std::accumulate(moves.begin(), moves.end(), 0.0f, [&policy](float l, const typename State::Move& move) { return l + policy[0][move2index(move)].template item<float>(); });
 
+    node->mtx.lock();
     for (auto& move : moves) {
         // First we get the location from policy.
         node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>() / policy_sum);
     }
+    node->mtx.unlock();
 
     // 确认是否进入了cpu
     assert(policy.device() == torch::kCPU);
