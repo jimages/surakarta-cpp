@@ -1,4 +1,4 @@
-# cmake 
+# cmake
 CMakeLists.txt.user
 CMakeCache.txt
 CMakeFiles
@@ -44,4 +44,15 @@ _deps
 *.app
 
 bin/
+build-release/
+build-debug/
 *.swp
+.vscode/
+
+# the pt file
+*.pt
+
+# the mac files
+*.DS_Store
+
+*.log
