@@ -1,0 +1,4 @@
+select
+        T.tot/count(-1), T.city
+        from trip, station, (select total(-1) as tot, station.city from trip, station where (station.station_id = trip.start_station_id or station.station_id = trip.end_station_id) group by city ) as T
+        where (station.station_id = trip.start_station_id or station.station_id = trip.end_station_id) and station.city = T.city;

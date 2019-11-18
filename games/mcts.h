@@ -331,7 +331,8 @@ shared_ptr<Node<State>> mcts_thread(shared_ptr<Node<State>> root, const State& s
         evaluate(root, state, network);
     root->mtx.unlock();
 
-    for (int i = 0; i < SIMULATION_MATCH; ++i) {
+    double time = omp_get_wtime();
+    for (int i = 0; omp_get_wtime() - time < 20; ++i) {
         auto node = root;
         auto game = state;
 
