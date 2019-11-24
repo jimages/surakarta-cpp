@@ -248,7 +248,7 @@ void main_program()
     }
 
     MCTS::ComputeOptions player1_options, player2_options;
-    player1_options.max_time = 10.0;
+    player1_options.max_time = 30.0;
     player1_options.number_of_threads = 1;
     player1_options.verbose = true;
 
