@@ -53,14 +53,6 @@ public:
     };
     typedef surakarta_move Move;
 
-    static const vector<pair<int, int>> outer_loop;
-    static const vector<pair<int, int>> inner_loop;
-    // a map to speedup the search.
-    static const int_fast16_t outer_loop_map[];
-    static const int_fast16_t inner_loop_map[];
-
-    static const uint_fast8_t arc_map[];
-
     static const Move no_move;
 
     static const char player_markers[3];
@@ -106,9 +98,9 @@ public:
         }
     }
 
-    bool has_moves(bool eat_only = false) const
+    bool has_moves() const
     {
-        return !get_moves(eat_only).empty();
+        return !get_moves().empty();
     }
 
     // Get the result of the match.
@@ -122,7 +114,7 @@ public:
             return 1.0;
     }
 
-    std::vector<Move>& get_moves(bool only_eat = false) const;
+    std::vector<Move>& get_moves() const;
     int get_winner() const;
     bool terminal() const;
 
@@ -132,66 +124,38 @@ private:
 
     static const vector<pair<int, int>> directions;
     mutable bool has_get_moves = false;
-    mutable bool only_eat = false;
     mutable std::vector<Move> moves;
+    enum class Direction : char {
+        Up = 1,
+        Down = 2,
+        Left = 4,
+        Right = 8,
+        LeftUp = 5,
+        LeftDown = 6,
+        RightUp = 9,
+        RightDown = 10
+    };
 
-    size_t find_all(bool is_inner, int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const;
-    bool can_eat(
-        const decltype(inner_loop)::const_iterator begin,
-        const decltype(inner_loop)::const_iterator end,
-        decltype(inner_loop)::const_iterator curr,
-        decltype(inner_loop)::const_iterator tart) const;
-    void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter, bool only_eat = false) const;
-
-    template <typename T>
-    Move get_valid_eat_one_direction(T begin, T end, const T pos) const
+    void get_eat_move(pair<int, int> pos, back_insert_iterator<vector<pair<int, int>>> inserter, Direction dir, ChessType chess, int arc_count) const;
+    void get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const;
+    bool get_offset(int& x, int& y, Direction dir) const
     {
-        uint_fast32_t has_passed_arc = false;
-        T next;
-        T i = pos;
-        do {
-            // 设定next的棋子位置。
-            if (i == end) {
-                i = begin;
-                next = begin + 1;
-            } else if (i == end - 1) {
-                next = begin;
-            } else {
-                next = i + 1;
-            }
-
-            // 当遇到对方棋子的时候，如果转了弯，则吃掉对方。
-            if (has_passed_arc && board[pair2index(*i)] == player_chess[3 - player_to_move]) {
-                return { 1, { pos->first, pos->second }, { i->first, i->second } };
-            }
-
-            // next所指向的位置是否经过了环。
-            if (!has_passed_arc && arc_map[pair2index(*i)] && arc_map[pair2index(*next)])
-                has_passed_arc = true;
-
-            if (board[pair2index(*i)] != ChessType::Null) {
-                // 如果途径了有棋子的地方,如果是棋子是自己，则跳过，否则退出。
-                if (*i == *pos) {
-                    ++i;
-                    continue;
-                } else
-                    return { 0, { pos->first, pos->second }, { i->first, i->second } };
-            }
-            i = next;
-
-        } while (next != pos);
-
-        return { 0, { pos->first, pos->second }, { pos->first, pos->second } };
-    }
-
-    template <class InputIt, class T>
-    vector<InputIt> find_all(InputIt first, InputIt end, const T& value) const
-    {
-        vector<InputIt> iterators;
-        for (auto i = first; i != end; ++i)
-            if (*i == value)
-                iterators.push_back(i);
-        return iterators;
+        const auto up_value = static_cast<char>(Direction::Up);
+        const auto down_value = static_cast<char>(Direction::Down);
+        const auto left_value = static_cast<char>(Direction::Left);
+        const auto right_value = static_cast<char>(Direction::Right);
+        auto dir_value = static_cast<char>(dir);
+        if ((dir_value & up_value)) {
+            y -= 1;
+        } else if ((dir_value & down_value)) {
+            y += 1;
+        }
+        if ((dir_value & left_value)) {
+            x -= 1;
+        } else if ((dir_value & right_value)) {
+            x += 1;
+        }
+        return x >= 0 && x <= 5 && y >= 0 && y <= 5;
     }
 };
 

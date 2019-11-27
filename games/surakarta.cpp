@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <errno.h>
 #include <iostream>
+#include <iterator>
 #include <mcts.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -13,24 +14,10 @@
 
 const char SurakartaState::player_markers[] = { '*', 'R', 'B' };
 const SurakartaState::ChessType SurakartaState::player_chess[] = { SurakartaState::ChessType::Null, SurakartaState::ChessType::Red, SurakartaState::ChessType::Black };
-const std::vector<std::pair<int, int>> SurakartaState::outer_loop = { { 1, 0 }, { 0, 1 }, { 1, 1 },
-    { 2, 1 }, { 3, 1 }, { 4, 1 }, { 5, 1 }, { 4, 0 }, { 4, 1 }, { 4, 2 }, { 4, 3 }, { 4, 4 }, { 4, 5 },
-    { 5, 4 }, { 4, 4 }, { 3, 4 }, { 2, 4 }, { 1, 4 }, { 0, 4 }, { 1, 5 }, { 1, 4 }, { 1, 3 }, { 1, 2 },
-    { 1, 1 } };
-const std::vector<std::pair<int, int>> SurakartaState::inner_loop = { { 2, 0 }, { 0, 2 }, { 1, 2 },
-    { 2, 2 }, { 3, 2 }, { 4, 2 }, { 5, 2 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 }, { 3, 4 }, { 3, 5 },
-    { 5, 3 }, { 4, 3 }, { 3, 3 }, { 2, 3 }, { 1, 3 }, { 0, 3 }, { 2, 5 }, { 2, 4 }, { 2, 3 }, { 2, 2 },
-    { 2, 1 } };
 
 const SurakartaState::Move SurakartaState::no_move = { 0, { 0, 0 }, { 0, 0 } };
-const int_fast16_t SurakartaState::outer_loop_map[] = { -1, 0, -1, -1, 7, -1, 1, 87, 3, 4, 168, 6, -1, 22, -1, -1, 9, -1, -1, 21, -1, -1, 10, -1, 18, 564, 16, 15, 366, 13, -1, 19, -1, -1, 12, -1 };
-const int_fast16_t SurakartaState::inner_loop_map[] = { -1, -1, 0, 7, -1, -1, -1, -1, 23, 8, -1, -1, 1, 2, 118, 137, 5, 6, 18, 17, 533, 335, 14, 13, -1, -1, 20, 11, -1, -1, -1, -1, 19, 12, -1, -1 };
-
 const vector<pair<int, int>> SurakartaState::directions = { { 1, 0 }, { -1, 0 }, { -1, 1 }, { 0, 1 }, { 1, 1 }, { 1, -1 },
     { 0, -1 }, { -1, -1 } };
-
-const uint_fast8_t SurakartaState::arc_map[] = { 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0 };
-
 #define PORT 8999
 #define BUFFER 2048
 void SurakartaState::do_move(Move move, bool is_human)
@@ -58,41 +45,21 @@ void SurakartaState::do_move(Move move, bool is_human)
     player_to_move = 3 - player_to_move;
     return;
 }
-void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter, bool only_eat) const
+void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Move>> inserter) const
 {
-    // now we check can we eat something.
-    bool flag = false;
-    decltype(inner_loop)::const_iterator iters[2];
-    int n = find_all(true, x, y, iters);
-    for (auto i = 0; i < n; ++i) {
-        auto move = get_valid_eat_one_direction(inner_loop.cbegin(), inner_loop.cend(), iters[i]);
-        if (move.is_activated) {
-            inserter = move;
-            flag |= true;
-        }
-        move = get_valid_eat_one_direction(inner_loop.crbegin(), inner_loop.crend(), make_reverse_iterator(iters[i]) - 1);
-        if (move.is_activated) {
-            inserter = move;
-            flag |= true;
+    // now we use the recursion algorithm.
+    // in corner
+    if (!((x == 0 && y == 0) || (x == 0 && y == 5)
+            || (x == 5 && y == 0) || (x == 5 && y == 5))) {
+        vector<pair<int, int>> pos_list;
+        get_eat_move({ x, y }, std::back_inserter(pos_list), Direction::Left, player_chess[player_to_move], 0);
+        get_eat_move({ x, y }, std::back_inserter(pos_list), Direction::Up, player_chess[player_to_move], 0);
+        get_eat_move({ x, y }, std::back_inserter(pos_list), Direction::Right, player_chess[player_to_move], 0);
+        get_eat_move({ x, y }, std::back_inserter(pos_list), Direction::Down, player_chess[player_to_move], 0);
+        for (auto& pos : pos_list) {
+            inserter = { 1, { x, y }, { pos.first, pos.second } };
         }
     }
-    n = find_all(false, x, y, iters);
-    for (auto i = 0; i < n; ++i) {
-        auto move = get_valid_eat_one_direction(outer_loop.cbegin(), outer_loop.cend(), iters[i]);
-        if (move.is_activated) {
-            inserter = move;
-            flag |= true;
-        }
-        move = get_valid_eat_one_direction(outer_loop.crbegin(), outer_loop.crend(), make_reverse_iterator(iters[i]) - 1);
-        if (move.is_activated) {
-            inserter = move;
-            flag |= true;
-        }
-    }
-
-    if (only_eat && flag)
-        return;
-
     // get all valiable moves.
     for (const auto& direc : directions) {
         if (x + direc.first < 6 && x + direc.first >= 0 && y + direc.second < 6 && y + direc.second >= 0 && board[BOARD_SIZE * (y + direc.second) + x + direc.first] == ChessType::Null) {
@@ -100,11 +67,52 @@ void SurakartaState::get_valid_move(int x, int y, back_insert_iterator<vector<Mo
         }
     }
 }
+void SurakartaState::get_eat_move(pair<int, int> pos, back_insert_iterator<vector<pair<int, int>>> inserter, Direction dir, ChessType chess, int arc_count) const
+{
+    int x = pos.first;
+    int y = pos.second;
+    // now we use the recursion algorithm.
+    // in corner
+    if ((x == 0 && y == 0) || (x == 0 && y == 5)
+        || (x == 5 && y == 0) || (x == 5 && y == 5))
+        return;
+    // recursion
+    if (!get_offset(x, y, dir)) {
+        // passing an arc
+        static const pair<int, int> pos_arr[] = {
+            { 1, -1 }, { 2, -1 }, { 2, 6 }, { 1, 6 },
+            { 4, -1 }, { 3, -1 }, { 3, 6 }, { 4, 6 },
+            { -1, 1 }, { -1, 2 }, { 6, 2 }, { 6, 1 },
+            { -1, 4 }, { -1, 3 }, { 6, 3 }, { 6, 4 }
+        };
+        auto x_dir = y <= 2 ? Direction::Down : Direction::Up;
+        auto y_dir = x <= 2 ? Direction::Right : Direction::Left;
+        if (x == -1) {
+            return get_eat_move(pos_arr[y - 1], inserter, x_dir, chess, arc_count + 1);
+        } else if (x == 6) {
+            return get_eat_move(pos_arr[y + 3], inserter, x_dir, chess, arc_count + 1);
+        } else if (y == -1) {
+            return get_eat_move(pos_arr[x + 7], inserter, y_dir, chess, arc_count + 1);
+        } else { // y == 6
+            return get_eat_move(pos_arr[x + 11], inserter, y_dir, chess, arc_count + 1);
+        }
+    } else {
+        if (board[y * BOARD_SIZE + x] == chess) {
+            return;
+        } else if (board[y * BOARD_SIZE+ x] == ChessType::Null) {
+            return get_eat_move({ x, y }, inserter, dir, chess, arc_count);
+        } else {
+            if (arc_count)
+                inserter = std::make_pair(x, y);
+        }
+    }
+}
+
 // Get all available move.
-std::vector<SurakartaState::Move>& SurakartaState::get_moves(bool only_eat) const
+std::vector<SurakartaState::Move>& SurakartaState::get_moves() const
 {
     PR_ASSERT();
-    if (has_get_moves && this->only_eat == only_eat) {
+    if (has_get_moves) {
         return moves;
     } else {
         // 利用局部性原理，在用的时候清除
@@ -112,11 +120,10 @@ std::vector<SurakartaState::Move>& SurakartaState::get_moves(bool only_eat) cons
         for (auto row = 0; row < BOARD_SIZE; ++row)
             for (auto col = 0; col < BOARD_SIZE; ++col) {
                 if (board[row * BOARD_SIZE + col] == player_chess[player_to_move]) {
-                    get_valid_move(col, row, back_inserter(moves), only_eat);
+                    get_valid_move(col, row, back_inserter(moves));
                 }
             }
         has_get_moves = true;
-        this->only_eat = only_eat;
         return moves;
     }
 }
@@ -154,31 +161,6 @@ bool SurakartaState::terminal() const
         }
     }
     return false;
-}
-
-// 检查在内外环上有几个对于的吃子的位置
-size_t SurakartaState::find_all(bool is_inner, int_fast16_t x, int_fast16_t y, decltype(inner_loop)::const_iterator iters[]) const
-{
-    const int_fast16_t* map;
-    decltype(inner_loop)::const_iterator target_iters;
-    if (is_inner) {
-        map = inner_loop_map;
-        target_iters = inner_loop.cbegin();
-    } else {
-        map = outer_loop_map;
-        target_iters = outer_loop.cbegin();
-    }
-    int_fast16_t target = map[x + y * BOARD_SIZE];
-    if (target == -1)
-        return 0;
-    else if (target > 23) {
-        iters[0] = target_iters + (target & 0x1F);
-        iters[1] = target_iters + ((target & 0x3E0) >> 5);
-        return 2;
-    } else {
-        iters[0] = target_iters + (target & 0x1F);
-        return 1;
-    }
 }
 
 SurakartaState::Move fromsocket(int fd)
