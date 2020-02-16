@@ -90,7 +90,7 @@ void train_server()
     std::string model_buf;
     bool has_updated = false;
 
-    // 获得对于的数据文件,棋盘数据,mcts统计数据,以及计算值数据
+    // load the pt if exists
     if (exists("board.pt"))
         torch::load(board, "board.pt");
     if (exists("mcts.pt"))
@@ -98,7 +98,7 @@ void train_server()
     if (exists("value.pt"))
         torch::load(value, "value.pt");
 
-    PolicyValueNet network(1);
+    PolicyValueNet network;
     std::cout << network.model << std::endl;
 
     if (exists("value_policy.pt"))
@@ -126,8 +126,6 @@ void train_server()
 
     while (true) {
         boost::optional<mpi::status> status;
-        // 睡一秒,这样可以不用一直自悬
-        sleep(1);
 
         if (status = req.test()) {
             // get board, probability, value
@@ -233,7 +231,7 @@ void evoluation_server()
     if (!torch::cuda::is_available()) {
         total_device = 1;
     }
-    PolicyValueNet net(0);
+    PolicyValueNet net((world.rank()) % total_device);
 
     // Init the model.
     double time = omp_get_wtime();
