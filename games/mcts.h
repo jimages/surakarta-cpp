@@ -288,7 +288,7 @@ void backpropagate(
 
     while (leaf != nullptr) {
         leaf->mtx.lock();
-        leaf->value_sum += (leaf->player_to_move == to_play ? value : 1 - value) + VIRTUAL_LOSS;
+        leaf->value_sum += (leaf->player_to_move == to_play ? -value : value) + VIRTUAL_LOSS;
         leaf->visits -= (VIRTUAL_LOSS - 1);
         leaf->Q = leaf->value_sum / leaf->visits;
         leaf->mtx.unlock();

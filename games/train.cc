@@ -338,7 +338,7 @@ void worker()
         auto v = torch::zeros({ size }, torch::kFloat);
         if (winner != 0) {
             for (int i = 0; i < size; ++i) {
-                v[i] = (i % 2 + 1) == winner ? 1.0F : 0.0F;
+                v[i] = (i % 2 + 1) == winner ? 1.0F : -1.0F;
             }
         }
 
