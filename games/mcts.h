@@ -116,15 +116,15 @@ public:
     {
         std::lock_guard<std::recursive_mutex> g(mtx);
 
-        // it look we lost n games.
-        visits += VIRTUAL_LOSS;
-        value_sum -= VIRTUAL_LOSS;
-        Q = value_sum / visits;
-
         assert(!children.empty());
         return *std::max_element(children.begin(), children.end(),
             [](const move_node_tuple& a,
                 const move_node_tuple& b) { return a.second->ucb_score() < b.second->ucb_score(); });
+
+        // it look we lost n games.
+        visits += VIRTUAL_LOSS;
+        value_sum -= VIRTUAL_LOSS;
+        Q = value_sum / visits;
     }
 
     move_node_tuple best_action(uint_fast32_t steps, double temp = 1.0, bool is_play = false) const
@@ -200,9 +200,9 @@ public:
     {
         mtx.lock();
         assert(!children.empty());
-        std::random_device dev;
-        std::mt19937 rd(dev());
-        std::gamma_distribution<float> gamma(0.3);
+        static std::random_device dev;
+        static std::mt19937 rd(dev());
+        static std::gamma_distribution<float> gamma(0.3);
         for (auto i = children.begin(); i != children.end(); ++i) {
             i->second->P = i->second->P * 0.75 + gamma(rd) * 0.25;
         }
@@ -288,7 +288,7 @@ void backpropagate(
 
     while (leaf != nullptr) {
         leaf->mtx.lock();
-        leaf->value_sum += (leaf->player_to_move == to_play ? -value : value) + VIRTUAL_LOSS;
+        leaf->value_sum += (leaf->player_to_move == to_play ? value : 1 - value) + VIRTUAL_LOSS;
         leaf->visits -= (VIRTUAL_LOSS - 1);
         leaf->Q = leaf->value_sum / leaf->visits;
         leaf->mtx.unlock();
@@ -296,6 +296,7 @@ void backpropagate(
     }
 }
 
+// 分布式运行蒙特卡洛搜索,用于训练
 template <typename State>
 typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps)
 {

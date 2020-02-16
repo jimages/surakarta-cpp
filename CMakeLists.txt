@@ -8,22 +8,15 @@ SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 # Default locations to search for on various platforms.
 LIST(APPEND SEARCH_LIBS /usr/lib)
 LIST(APPEND SEARCH_LIBS /usr/local/lib)
-LIST(APPEND SEARCH_LIBS /usr/local/homebrew/lib) # Mac OS X
-LIST(APPEND SEARCH_LIBS /opt/local/lib)
 LIST(APPEND SEARCH_LIBS /usr/local/opt/llvm/lib)
 
 LIST(APPEND SEARCH_HEADERS /usr/include)
-LIST(APPEND SEARCH_HEADERS /usr/local/include)
-LIST(APPEND SEARCH_HEADERS /usr/local/homebrew/include) # Mac OS X
 LIST(APPEND SEARCH_HEADERS /opt/local/include)
-LIST(APPEND SEARCH_HEADERS /usr/local/opt/llvm/lib)
-IF(${APPLE})
-    SET(Boost_NO_BOOST_CMAKE ON)
-ENDIF()
+LIST(APPEND SEARCH_HEADERS /usr/local/opt/llvm/include)
 
 ENABLE_TESTING()
 
