@@ -192,7 +192,6 @@ public:
         assert(parent != nullptr);
 
         float pb_c = std::log((static_cast<float>(parent->visits) + PB_C_BASE + 1) / PB_C_BASE) + PB_C_INIT;
-        //float pb_c = 5.0;
         pb_c *= std::sqrt(static_cast<float>(parent->visits)) / (static_cast<float>(visits) + 1);
 
         return pb_c * P + Q;
@@ -202,9 +201,9 @@ public:
     {
         mtx.lock();
         assert(!children.empty());
-        std::random_device dev;
-        std::mt19937 rd(dev());
-        std::gamma_distribution<float> gamma(0.3);
+        static std::random_device dev;
+        static std::mt19937 rd(dev());
+        static std::gamma_distribution<float> gamma(0.3);
         for (auto i = children.begin(); i != children.end(); ++i) {
             i->second->P = i->second->P * 0.75 + gamma(rd) * 0.25;
         }
@@ -252,6 +251,7 @@ float evaluate(
     return value.item<float>();
 }
 
+// 用于单个实例情况下,不适用mpi进行分布式处理
 template <typename State>
 float evaluate(
     shared_ptr<Node<State>> node, const State& state, PolicyValueNet& network)
@@ -323,6 +323,8 @@ typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const Sta
 
     return root->best_action(steps, 1.0).first;
 }
+
+// 在比赛的过程中,使用多线程对博弈树进行遍历
 template <typename State>
 shared_ptr<Node<State>> mcts_thread(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& network, const int steps)
 {
@@ -350,6 +352,8 @@ shared_ptr<Node<State>> mcts_thread(shared_ptr<Node<State>> root, const State& s
     }
     return root;
 }
+
+// 比赛模式下,用多线程对博弈树进行蒙特卡洛搜索
 template <typename State>
 typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, PolicyValueNet& network, const int steps)
 {
