@@ -200,9 +200,9 @@ public:
     {
         mtx.lock();
         assert(!children.empty());
-        static std::random_device dev;
-        static std::mt19937 rd(dev());
-        static std::gamma_distribution<float> gamma(0.3);
+        std::random_device dev;
+        std::mt19937 rd(dev());
+        std::gamma_distribution<float> gamma(0.3);
         for (auto i = children.begin(); i != children.end(); ++i) {
             i->second->P = i->second->P * 0.75 + gamma(rd) * 0.25;
         }
