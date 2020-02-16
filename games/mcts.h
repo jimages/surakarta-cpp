@@ -117,7 +117,7 @@ public:
         std::lock_guard<std::recursive_mutex> g(mtx);
 
         assert(!children.empty());
-        return *std::max_element(children.begin(), children.end(),
+        auto best = *std::max_element(children.begin(), children.end(),
             [](const move_node_tuple& a,
                 const move_node_tuple& b) { return a.second->ucb_score() < b.second->ucb_score(); });
 
@@ -125,6 +125,8 @@ public:
         visits += VIRTUAL_LOSS;
         value_sum -= VIRTUAL_LOSS;
         Q = value_sum / visits;
+
+        return best;
     }
 
     move_node_tuple best_action(uint_fast32_t steps, double temp = 1.0, bool is_play = false) const
