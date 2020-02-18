@@ -363,9 +363,11 @@ typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, 
     std::exception_ptr exception;
     vector<future<shared_ptr<Node<State>>>> root_future;
     for (int i = 0; i < 3; i++) {
-        auto func = [root, state, &network, steps, &mtx, &exception]() -> shared_ptr<Node<State>> {
+        auto func = [root, state, &network, steps, &mtx, &exception, i]() -> shared_ptr<Node<State>> {
+            PolicyValueNet n(i % (torch::cuda::is_available() ? torch::cuda::device_count() : 1));
+            n.deserialize(network.serialize());
             try {
-                return mcts_thread(root, state, network, steps);
+                return mcts_thread(root, state, n, steps);
             } catch (...) {
                 std::lock_guard<std::mutex> guard(mtx);
                 exception = std::current_exception();
