@@ -150,9 +150,11 @@ public:
                 double total_t = std::accumulate(w.begin(), w.end(), 0.0);
                 std::cout << "total: " << total << '\n';
                 for (int i = 0; i < v.size(); ++i) {
-                    std::cout << "move:" << v[i].first << "\tvisits:" << v[i].second->visits
-                              << "\tratio:" << w[i] / total_t << "\t\tp:" << v[i].second->P
-                              << "\t\tv:" << v[i].second->value_sum / v[i].second->visits << '\n';
+                    // 输出调试信息
+                    std::cout << std::fixed << std::setprecision(4)
+                              << "move:" << v[i].first << "\tvisits:" << v[i].second->visits
+                              << "\tratio:" << w[i] / total_t << "\tp:" << v[i].second->P
+                              << "\tv:" << v[i].second->value_sum / v[i].second->visits << '\n';
                 }
 
                 std::cout << "we chouse move:" << v[ac_idx].first << "  visits:" << v[ac_idx].second->visits
