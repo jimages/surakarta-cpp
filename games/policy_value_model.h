@@ -1,3 +1,6 @@
+#ifndef _VAR_FOLDERS_06_6383H54N3ZXC5BMWJHZ0FNSC0000GN_T_NVIMWQNSSI_10_POLICY_VALUE_MODEL_H
+#define _VAR_FOLDERS_06_6383H54N3ZXC5BMWJHZ0FNSC0000GN_T_NVIMWQNSSI_10_POLICY_VALUE_MODEL_H
+
 #pragma once
 #include <torch/torch.h>
 #include <utility>
@@ -5,9 +8,7 @@ inline torch::nn::Conv2dOptions conv_options(int64_t in_planes, int64_t out_plan
     int64_t stride = 1, int64_t padding = 0, bool with_bias = false)
 {
     torch::nn::Conv2dOptions conv_options = torch::nn::Conv2dOptions(in_planes, out_planes, kerner_size);
-    conv_options.stride_ = stride;
-    conv_options.padding_ = padding;
-    conv_options.with_bias_ = with_bias;
+    conv_options.stride(stride).padding(padding).bias(with_bias);
     return conv_options;
 }
 // 残差网络
@@ -15,9 +16,9 @@ struct BasicBlockImpl : torch::nn::Module {
 
     int64_t stride;
     torch::nn::Conv2d conv1;
-    torch::nn::BatchNorm bn1;
+    torch::nn::BatchNorm2d bn1;
     torch::nn::Conv2d conv2;
-    torch::nn::BatchNorm bn2;
+    torch::nn::BatchNorm2d bn2;
     torch::nn::Sequential downsample;
     BasicBlockImpl(int64_t inplanes, int64_t planes, int64_t stride_ = 1,
         torch::nn::Sequential downsample_ = torch::nn::Sequential());
@@ -50,17 +51,17 @@ struct NetImpl : torch::nn::Module {
 
     // 公共网络
     torch::nn::Conv2d conv1 { nullptr };
-    torch::nn::BatchNorm bat1 { nullptr };
+    torch::nn::BatchNorm2d bat1 { nullptr };
     torch::nn::Sequential res_layers { nullptr };
 
     // 策略网络
     torch::nn::Conv2d pol_conv1 { nullptr };
-    torch::nn::BatchNorm pol_bat1 { nullptr };
+    torch::nn::BatchNorm2d pol_bat1 { nullptr };
     torch::nn::Linear pol_fc1 { nullptr };
 
     // 价值网络
     torch::nn::Conv2d val_conv1 { nullptr };
-    torch::nn::BatchNorm val_bat1 { nullptr };
+    torch::nn::BatchNorm2d val_bat1 { nullptr };
     torch::nn::Linear val_fc1 { nullptr };
     torch::nn::Linear val_fc2 { nullptr };
 };
@@ -83,3 +84,5 @@ struct PolicyValueNet {
 private:
     torch::Device device { torch::kCPU };
 };
+
+#endif

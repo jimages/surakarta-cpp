@@ -13,7 +13,7 @@ class Core(object):
 
         # 连接参数
         self.socket = socket.socket()
-        self.host_name = "localhost"
+        self.host_name = "deeplearning"
         self.port = 8999
         self.socket.connect((self.host_name, self.port))
 

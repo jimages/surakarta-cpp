@@ -48,6 +48,7 @@ IF (NOT MSVC)
   # OpenMP needs to be included as a library on some platforms.
   LIST(APPEND MY_LIBRARY_DEPENDENCIES omp)
 ENDIF (NOT MSVC)
+
 ELSE(${OPENMP_FOUND})
 MESSAGE("-- Can't find OpenMP. Continuing without it.")
 ENDIF(${OPENMP_FOUND})

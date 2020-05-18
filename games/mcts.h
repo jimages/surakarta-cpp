@@ -1,3 +1,6 @@
+#ifndef _VAR_FOLDERS_06_6383H54N3ZXC5BMWJHZ0FNSC0000GN_T_NVIMFYP7HP_4_MCTS_H
+#define _VAR_FOLDERS_06_6383H54N3ZXC5BMWJHZ0FNSC0000GN_T_NVIMFYP7HP_4_MCTS_H
+
 #pragma once
 //
 // Zachary Wang 2019
@@ -385,3 +388,5 @@ typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, 
     return root->best_action(steps, 0.2, true).first;
 }
 }
+
+#endif
