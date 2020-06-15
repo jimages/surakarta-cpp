@@ -26,6 +26,7 @@
 #include <omp.h>
 #include <pthread.h>
 #include <random>
+#include <sstream>
 #include <string>
 #include <torch/torch.h>
 #include <tuple>
@@ -75,9 +76,9 @@ void train_server()
     mpi::communicator world;
     mpi::communicator server = world.split(1);
     unsigned int size = world.size();
-    std::cout << "total processes: " << size << std::endl;
-    std::cout << "the simulation count:" << SIMULATION << std::endl;
-    std::cout << "evoluiton batch size:" << EVO_BATCH << std::endl;
+    spdlog::info("total processes: {}", size);
+    SPDLOG_INFO("the simulation count: {}", SIMULATION);
+    SPDLOG_INFO("evoluiton batch size: {}", EVO_BATCH);
 
     unsigned long game = 1;
     u_long batch = 1;
@@ -99,7 +100,9 @@ void train_server()
         torch::load(value, "value.pt");
 
     PolicyValueNet network;
-    std::cout << network.model << std::endl;
+    std::stringstream s;
+    s << network.model;
+    spdlog::info(s.str());
 
     if (exists("value_policy.pt"))
         network.load_model("value_policy.pt");
@@ -107,7 +110,7 @@ void train_server()
         torch::load(*(network.optimizer), "optimizer.pt");
 
     // brocast the model
-    std::cout << "Broadcast the network." << std::endl;
+    SPDLOG_INFO("Broadcast the network.");
     if (torch::cuda::is_available()) {
         network.model->to(torch::kCPU);
     }
@@ -137,12 +140,9 @@ void train_server()
             board = torch::cat({ b, board });
             mcts = torch::cat({ p, mcts });
             value = torch::cat({ v, value });
-            std::cout << std::endl;
-            std::cout << "game: " << game
-                      << " dataset: " << board.size(0)
-                      << " game length:" << v.size(0)
-                      << " from process:" << status->source()
-                      << std::endl;
+            std::cout << '\n';
+            spdlog::info("game: {} dataset: {} game length: {} from process: {}",
+                game, board.size(0), v.size(0), status->source());
 
             if (board.size(0) >= SAMPLE_SIZE) {
                 // 等样本数量超过限制的时候，去掉头部的数据。
@@ -156,17 +156,14 @@ void train_server()
                 torch::Tensor loss, entropy;
                 std::tie(b, p, v) = sample(board, mcts, value);
                 std::tie(loss, entropy) = network.train_step(b, p, v);
-                std::cout << "batch: " << batch++
-                          << " loss: " << loss.item<float>()
-                          << " entropy: " << entropy.item<float>()
-                          << " train dataset size: " << board.size(0)
-                          << std::endl;
+                spdlog::info("batch: {} loss: {} entropy: {} train dataset size: {}",
+                    batch++, loss.item<float>(), entropy.item<float>(), board.size(0));
                 has_updated = true;
             }
 
             // saving the model
             if (batch % 100 == 0) {
-                std::cout << "Saving checkpoint.........." << std::endl;
+                SPDLOG_INFO("Saving checkpoint..........");
                 network.save_model("value_policy.pt");
                 torch::save(board, "board.pt");
                 torch::save(mcts, "mcts.pt");
@@ -203,8 +200,8 @@ void train_server()
                     model_buf.clear();
                     mpi::broadcast(server, model_buf, 0);
                     last_sync_model = omp_get_wtime();
-                    std::cout << std::endl
-                              << "No update so skip the fetching." << std::endl;
+                    std::cout << '\n';
+                    SPDLOG_INFO("No update so skip the fetching.");
                 }
             }
         }
@@ -219,7 +216,7 @@ void evoluation_server()
     std::string state_buffer;
 
     auto req = world.irecv(mpi::any_source, 3, state_buffer);
-    std::cout << "evaluation proecess rank:" << world.rank() << std::endl;
+    spdlog::info("evaluation proecess rank: {}", world.rank());
     boost::optional<mpi::status> status;
 
     std::deque<int> sender_deque;
@@ -360,9 +357,11 @@ void worker()
 
 int main(int argc, char* argv[])
 {
+    spdlog::set_pattern("[%H:%M:%S %z] [%n] [%^%l%$] [process %P] [thread %t] %v");
+    SPDLOG_INFO("苏拉卡尔塔棋AlphaZero by Zachary Wang.");
     mpi::environment env(argc, argv, mt::multiple);
     if (env.thread_level() < mt::multiple) {
-        std::cerr << "unsupport the thread environment.\n";
+        SPDLOG_ERROR("unsupport the thread environment.");
         env.abort(-1);
     }
     mpi::communicator world;
