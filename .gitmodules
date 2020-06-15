@@ -1,0 +1,6 @@
+[submodule "libspdlog"]
+	path = libspdlog
+	url = https://github.com/gabime/spdlog.git
+[submodule "libck"]
+	path = libck
+	url = https://github.com/concurrencykit/ck.git
