@@ -100,16 +100,22 @@ IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 ENDIF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 
 # add spdlog
-find_package(spdlog)
+find_package(spdlog QUIET)
 if(NOT ${spdlog_FOUND})
     message("-- NOT Found The spdlog try to compile ourself.")
     add_subdirectory(libspdlog)
 endif()
 
+# add spdlog
 include(libck.cmake)
 include_directories(${LIBCK_INCLUDES})
 
-LIST(APPEND MY_LIBRARY_DEPENDENCIES spdlog::spdlog spdlog::spdlog_header_only ck)
+# Add marl
+set(MARL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libmarl)
+add_subdirectory(${MARL_DIR})
+include_directories(${MARL_INCLUDE_DIR})
+
+LIST(APPEND MY_LIBRARY_DEPENDENCIES spdlog::spdlog spdlog::spdlog_header_only ck marl)
 #
 # Include directories
 #
