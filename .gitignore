@@ -56,3 +56,4 @@ build-debug/
 *.DS_Store
 
 *.log
+.clangd/*
