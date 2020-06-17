@@ -4,3 +4,6 @@
 [submodule "libck"]
 	path = libck
 	url = https://github.com/concurrencykit/ck.git
+[submodule "libmarl"]
+	path = libmarl
+	url = https://github.com/google/marl.git
