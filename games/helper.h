@@ -25,3 +25,4 @@ inline torch::Tensor torch_deserialize(const std::string& str)
     torch::load(tens, stream);
     return tens;
 }
+

@@ -40,7 +40,7 @@ IF(NOT CMAKE_BUILD_TYPE)
 ENDIF()
 MESSAGE("-- The Build type is ${CMAKE_BUILD_TYPE}")
 add_compile_options(-Wall -Wextra)
-set(CMAKE_CXX_FLAGS_DEBUG "-g -Og")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -DNDEBUG -ffast-math -march=native -funroll-loops -malign-double -minline-all-stringops -ftree-parallelize-loops=`grep -c ^processor /proc/cpuinfo
 ` -flto -fuse-linker-plugin ")
 SET (MY_LIBRARY_DEPENDENCIES)
@@ -108,12 +108,10 @@ endif()
 
 # add spdlog
 include(libck.cmake)
-include_directories(${LIBCK_INCLUDES})
 
 # Add marl
 set(MARL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libmarl)
 add_subdirectory(${MARL_DIR})
-include_directories(${MARL_INCLUDE_DIR})
 
 LIST(APPEND MY_LIBRARY_DEPENDENCIES spdlog::spdlog spdlog::spdlog_header_only ck marl)
 #

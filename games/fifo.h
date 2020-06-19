@@ -12,17 +12,16 @@ class fifo {
     typedef T Value;
     const size_t size = sizeof(Value);
     ck_fifo_mpmc f;
-    static std::allocator<ck_fifo_mpmc_entry> stub_allocator;
-    static std::allocator<T> value_allocator;
+    std::allocator<ck_fifo_mpmc_entry_t> stub_allocator;
 
 public:
     fifo()
     {
-        ck_fifo_mpmc_init(&f, reinterpret_cast<void*>(stub_allocator.allocate(1)));
+        ck_fifo_mpmc_init(&f, stub_allocator.allocate(1));
     }
     ~fifo()
     {
-        ck_fifo_mpmc_entry* garbage;
+        ck_fifo_mpmc_entry_t * garbage;
         ck_fifo_mpmc_deinit(&f, &garbage);
         while (NULL != garbage) {
             auto next = garbage->next.pointer;
@@ -37,7 +36,7 @@ public:
     // 返回True的时候,表示获取成功,否则表示获取失败.
     bool dequeue(T** value)
     {
-        ck_fifo_mpmc_entry* entry;
+        ck_fifo_mpmc_entry_t* entry;
         if (ck_fifo_mpmc_dequeue(&f, reinterpret_cast<void*>(value), &entry) == false) {
             return false;
         } else {

@@ -10,7 +10,7 @@ ExternalProject_Add(
     libck
     PREFIX ${LIBCK_BIN}
     SOURCE_DIR ${LIBCK_DIR}
-    CONFIGURE_COMMAND ${LIBCK_DIR}/configure --prefix=${LIBCK_BIN} --enable-rtm
+    CONFIGURE_COMMAND ${LIBCK_DIR}/configure --prefix=${LIBCK_BIN}
     BUILD_COMMAND make
     INSTALL_COMMAND make install
     BUILD_BYPRODUCTS ${LIBCK_STATIC_LIB}

@@ -4,7 +4,7 @@
 #define GAME 50000000
 
 // 单局步数限制
-#define GAME_LIMIT 800
+#define GAME_LEN_LIMIT 800
 
 // 训练batch
 #ifdef NDEBUG
@@ -20,7 +20,7 @@
 #ifdef NDEBUG
 #define EVO_BATCH 4
 #else
-#define EVO_BATCH 1
+#define EVO_BATCH 2
 #endif
 
 #ifdef NDEBUG
@@ -38,3 +38,18 @@
 #define LONG_SITUATION_THRESHOLD 3
 
 #define VIRTUAL_LOSS 1000
+
+#define PB_C_BASE 1599.0f
+#define PB_C_INIT 1.25f
+#ifdef NDEBUG
+#define SIMULATION 800
+#else
+#define SIMULATION 100
+#endif // NDEBUG
+
+// mcts simulation in match mode.
+#ifdef NDEBUG
+#define SIMULATION_MATCH 20000
+#else
+#define SIMULATION_MATCH 1500
+#endif

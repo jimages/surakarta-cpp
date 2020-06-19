@@ -1,6 +1,3 @@
-#ifndef _VAR_FOLDERS_06_6383H54N3ZXC5BMWJHZ0FNSC0000GN_T_NVIMFYP7HP_4_MCTS_H
-#define _VAR_FOLDERS_06_6383H54N3ZXC5BMWJHZ0FNSC0000GN_T_NVIMFYP7HP_4_MCTS_H
-
 #pragma once
 //
 // Zachary Wang 2019
@@ -17,13 +14,10 @@
 // http://mcts.ai/code/python.html
 //
 #include <algorithm>
-#include <boost/archive/text_iarchive.hpp>
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/mpi.hpp>
-#include <boost/serialization/utility.hpp>
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
+#include <functional>
 #include <future>
 #include <iomanip>
 #include <iostream>
@@ -42,21 +36,6 @@
 #include "helper.h"
 #include "policy_value_model.h"
 
-#define PB_C_BASE 1599.0f
-#define PB_C_INIT 1.25f
-#ifdef NDEBUG
-#define SIMULATION 800
-#else
-#define SIMULATION 100
-#endif // NDEBUG
-
-// mcts simulation in match mode.
-#ifdef NDEBUG
-#define SIMULATION_MATCH 20000
-#else
-#define SIMULATION_MATCH 1500
-#endif
-
 //
 //
 // [1] Silver, D., Hubert, T., Schrittwieser, J., Antonoglou, I., Lai, M., Guez, A., … Hassabis, D. (2018).
@@ -67,7 +46,6 @@
 //     https://github.com/PetterS/monte-carlo-tree-search
 //
 
-namespace mpi = boost::mpi;
 namespace MCTS {
 using std::async;
 using std::cerr;
@@ -220,35 +198,26 @@ private:
 
 /////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////
-inline std::pair<torch::Tensor, torch::Tensor> distribute_policy_value(const torch::Tensor& state, mpi::communicator world)
-{
-    std::string str;
-    std::pair<std::string, std::string> data;
-    int rank = world.rank();
-    world.send(rank % (EVA_SERVER_NUM) + 1, 3, torch_serialize(state));
-    world.recv(rank % (EVA_SERVER_NUM) + 1, 4, data);
 
-    return { torch_deserialize(data.first).unsqueeze(0), torch_deserialize(data.second).unsqueeze(0) };
-}
-
+// 通用的前向计算框架
 template <typename State>
 float evaluate(
-    shared_ptr<Node<State>> node, const State& state, mpi::communicator world)
+    shared_ptr<Node<State>> node, const State& state, std::function<std::pair<torch::Tensor, torch::Tensor>(torch::Tensor)> func)
 {
     torch::Tensor policy, value;
-    std::tie(policy, value) = distribute_policy_value(state.tensor(), world);
+    std::tie(policy, value) = func(state.tensor());
 
     // 确认是否进入了cpu
     assert(policy.device() == torch::kCPU);
     assert(value.device() == torch::kCPU);
     auto& moves = state.get_moves();
-    float policy_sum = std::accumulate(moves.begin(), moves.end(), 0.0f, [&policy](float l, const typename State::Move& move) { return l + policy[0][move2index(move)].template item<float>(); });
+    float policy_sum = std::accumulate(moves.begin(), moves.end(), 0.0f, [&policy](float l, const typename State::Move& move) { return l + policy[move2index(move)].template item<float>(); });
 
     node->mtx.lock();
     if (!node->expanded()) {
         for (auto& move : moves) {
             // First we get the location from policy.
-            node->add_child(3 - state.player_to_move, move, (policy[0][move2index(move)]).template item<float>() / policy_sum);
+            node->add_child(3 - state.player_to_move, move, (policy[move2index(move)]).template item<float>() / policy_sum);
         }
     }
     node->mtx.unlock();
@@ -305,12 +274,12 @@ void backpropagate(
 
 // 分布式运行蒙特卡洛搜索,用于训练
 template <typename State>
-typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const State& state, mpi::communicator world, const int steps)
+typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, const int steps, std::function<std::pair<torch::Tensor, torch::Tensor>(torch::Tensor)> func)
 {
     assert(root != nullptr);
     assert(root->parent == nullptr);
 
-    evaluate(root, state, world);
+    evaluate(root, state, func);
     root->add_exploration_noise();
 
     for (int i = 0; i < SIMULATION; ++i) {
@@ -322,7 +291,7 @@ typename State::Move run_mcts_distribute(shared_ptr<Node<State>> root, const Sta
             std::tie(move, node) = node->best_child();
             game.do_move(move);
         }
-        float value = evaluate(node, game, world);
+        float value = evaluate(node, game, func);
         backpropagate(node, game.player_to_move, value);
     }
 
@@ -388,5 +357,3 @@ typename State::Move run_mcts(shared_ptr<Node<State>> root, const State& state, 
     return root->best_action(steps, 0.2, true).first;
 }
 }
-
-#endif
