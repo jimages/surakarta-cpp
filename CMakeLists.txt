@@ -113,7 +113,7 @@ include(libck.cmake)
 set(MARL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libmarl)
 add_subdirectory(${MARL_DIR})
 
-LIST(APPEND MY_LIBRARY_DEPENDENCIES spdlog::spdlog spdlog::spdlog_header_only ck marl)
+LIST(APPEND MY_LIBRARY_DEPENDENCIES ck marl spdlog::spdlog)
 #
 # Include directories
 #

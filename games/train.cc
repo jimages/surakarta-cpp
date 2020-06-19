@@ -3,6 +3,7 @@
  */
 #include <omp.h>
 #include <pthread.h>
+#include <spdlog/cfg/env.h>
 #include <torch/torch.h>
 #include <unistd.h>
 
@@ -102,7 +103,6 @@ std::tuple<Tensor, Tensor, Tensor> sample(const Tensor& board,
 
 void* trainer(void* param)
 {
-    spdlog::set_level(spdlog::level::debug);
     SPDLOG_INFO("单步的模拟次数为: {}", SIMULATION);
     SPDLOG_INFO("单次前向计算的数量为: {}", EVO_BATCH);
 
@@ -276,6 +276,7 @@ void* evoluter(void* params)
 
         if (evo_queue.dequeue(&p))
         {
+            spdlog::debug("计算:收到来自{}的棋盘数据", p->first);
             sender_deque.emplace_back(p->first);
             evolution_batch = torch::cat({evolution_batch, p->second});
             // p在原始线程中是堆中内存,要及施放掉.
@@ -286,6 +287,8 @@ void* evoluter(void* params)
         if (sender_deque.size() >= EVO_BATCH)
         {
             Tensor policy, value;
+            spdlog::debug("计算:开始前向计算,本次计算的batch大小为:{}",
+                          evolution_batch.size(0));
             std::tie(policy, value) = net.policy_value(evolution_batch);
 
             assert(policy.size(0) == (long long)evolution_batch.size(0));
@@ -296,11 +299,17 @@ void* evoluter(void* params)
             {
                 // 使用ck_hs, 这里又分配了堆上内存.
                 auto pair = new std::pair(policy[ind], value[ind]);
-                evo_ht.set(&sender_deque.at(ind), pair);
+                auto key  = sender_deque.at(ind);
+                spdlog::debug("计算:将计算后的结果发送给{}", key);
+                if (evo_ht.put(key, pair) == false)
+                {
+                    SPDLOG_CRITICAL("计算:发送给{}失败", key);
+                }
                 evo_counter++;
             }
             sender_deque.clear();
             // 设置完毕之后,发送一个广播,唤醒所有的等待的线程.
+            spdlog::debug("计算:完成一次计算,广播条件量");
             pthread_cond_broadcast(&evo_cond);
 
             evolution_batch = torch::empty({0});
@@ -312,6 +321,7 @@ void* evoluter(void* params)
         // 检测距离上一次是否有更新过模型
         if (evo_model_ver != model_version)
         {
+            spdlog::info("准备同步模型");
             if (pthread_mutex_trylock(&model_mtx) == 0)
             {
                 PolicyValueNet net(1);
@@ -359,22 +369,24 @@ void* worker(void* params)
                 auto move = run_mcts(
                     root, game, count / 2,
                     [](Tensor t) -> std::pair<Tensor, Tensor> {
-                        auto id = omp_get_thread_num();
+                        auto id = omp_get_thread_num() + 1;
                         auto data =
                             new std::pair<decltype(omp_get_thread_num()),
                                           Tensor>(id, t);
+                        spdlog::debug("{}:准备将棋盘数据发送给前向计算服务器",
+                                      id);
                         evo_queue.enqueue(data);
                         // 用于存储前向计算结果的指针
                         std::pair<Tensor, Tensor>* p;
 
-                        // todo:
-                        // 等着想办法获取以及提供notify机制,设置一个信号量?
                         while (pthread_cond_wait(&evo_cond, &evo_mtx) == 0)
                         {
                             // 前向计算每完成一次计算,就唤醒一次子线程,让他们自己去找有没有自己的id,如果没有就再等等
-                            if (evo_ht.get(&id, &p))
+                            if (evo_ht.get(id, &p))
                             {
-                                evo_ht.remove(&id);
+                                spdlog::debug("{}:收到前向计算服务器的计算结果",
+                                              id);
+                                evo_ht.remove(id);
                                 auto d = *p;
                                 // ht中的数据是堆上的内存,所以我们应该清空掉这里面的数据
                                 delete p;
@@ -447,13 +459,10 @@ void* worker(void* params)
 
 int main(int argc, char* argv[])
 {
+    spdlog::cfg::load_env_levels();
     spdlog::set_pattern(
         "[%H:%M:%S %z] [%n] [%^%l%$] [process %P] [thread %t] %v");
     SPDLOG_INFO("苏拉卡尔塔棋AlphaZero by Zachary Wang.");
-#ifndef NDEBUG
-    SPDLOG_INFO("设置Debug日志输出模型");
-    spdlog::set_level(spdlog::level::debug);
-#endif
 
     pthread_t t[3];
 
