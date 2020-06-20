@@ -20,15 +20,19 @@ struct BasicBlockImpl : public torch::nn::Cloneable<BasicBlockImpl>
     BasicBlockImpl() = default;
     virtual void reset() override;
     void reset_parameters();
-    torch::nn::Conv2d conv1;
-    torch::nn::BatchNorm2d bn1;
-    torch::nn::Conv2d conv2;
-    torch::nn::BatchNorm2d bn2;
+    torch::nn::Conv2d conv1 = nullptr;
+    torch::nn::BatchNorm2d bn1 = nullptr;
+    torch::nn::Conv2d conv2 = nullptr;
+    torch::nn::BatchNorm2d bn2 = nullptr;
     torch::nn::Sequential downsample;
     BasicBlockImpl(int64_t inplanes, int64_t planes, int64_t stride_ = 1,
                    torch::nn::Sequential downsample_ = torch::nn::Sequential());
-
     torch::Tensor forward(torch::Tensor x);
+    private:
+        int64_t inplanes;
+        int64_t planes;
+        int64_t stride_;
+        torch::nn::Sequential downsample_;
 };
 
 TORCH_MODULE(BasicBlock);

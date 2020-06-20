@@ -43,7 +43,7 @@ add_compile_options(-Wall -Wextra)
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 
 IF ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
-set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -DNDEBUG -ffast-math -march=native -funroll-loops -malign-double -minline-all-stringops -ftree-parallelize-loops=8 -flto -fuse-linker-plugin ")
+set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -DNDEBUG -ffast-math -march=native -funroll-loops -malign-double -minline-all-stringops -ftree-parallelize-loops=8 -flto -fuse-linker-plugin")
 endif()
 IF ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
@@ -71,7 +71,7 @@ MESSAGE("-- Can't find OpenMP. Continuing without it.")
 ENDIF(${OPENMP_FOUND})
 
 ## Pytorch
-FIND_PACKAGE(torch REQUIRED)
+FIND_PACKAGE(Torch REQUIRED)
 MESSAGE("-- Find PyTorch: ${TORCH_FOUND} ")
 LIST(APPEND MY_LIBRARY_DEPENDENCIES ${TORCH_LIBRARIES})
 LIST(APPEND CMAKE_CXX_FLAGS ${TORCH_CXX_FLAGS})

@@ -7,7 +7,6 @@
 #include <torch/torch.h>
 #include <unistd.h>
 
-
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -184,7 +183,7 @@ void* trainer(void* param)
             mcts  = torch::cat({p, mcts});
             value = torch::cat({v, value});
             std::cout << '\n';
-            spdlog::info("game: {} dataset: {} game length: {} ", game,
+            spdlog::info("积累的局数: {} 数据集: {} 当局步数: {} ", game,
                          board.size(0), v.size(0));
 
             if (board.size(0) >= SAMPLE_SIZE)
@@ -243,97 +242,106 @@ void* evoluter(void* params)
 {
     // 先睡一秒钟,防止出现evoluter比trainer先进入临界区.
     sleep(1);
-    spdlog::info("前向计算线程启动!");
-    std::deque<int> sender_deque;
-    uint64_t evo_model_ver;
-
-    // When run on cpu we should initizlize the model on cpu.
-    // So the we assign 1 to totoal_device to bypass the divide_by_zero errors.
-    // todo: 处理好自主选择GPU芯片的功能.
-    int total_device = torch::cuda::device_count();
-    if (!torch::cuda::is_available())
+#pragma omp parallel num_threads(2)
     {
-        total_device = 1;
-    }
+        auto id = omp_get_thread_num();
+        spdlog::info("前向计算线程{}启动!", id);
+        std::deque<int> sender_deque;
+        uint64_t evo_model_ver;
 
-    // 开始拷贝model数据,用于前向计算
-    // 直接从主线程复制一个network.
-    pthread_mutex_lock(&model_mtx);
-    SPDLOG_INFO("evoluter开始复制model");
-    PolicyValueNet net(1);
-    net.model = Net(
-        std::dynamic_pointer_cast<NetImpl>(gNetwork.model->clone(net.device)));
-
-    evo_model_ver = model_version;
-    pthread_mutex_unlock(&model_mtx);
-
-    u_long totoal_evaluation = 0;
-    Tensor evolution_batch   = torch::empty({0});
-
-    while (true)
-    {
-        // 获取自对弈线程发送的棋局数据
-        std::pair<decltype(omp_get_thread_num()), Tensor>* p;
-
-        if (evo_queue.dequeue(&p))
+        // When run on cpu we should initizlize the model on cpu.
+        // So the we assign 1 to totoal_device to bypass the divide_by_zero
+        // errors. todo: 处理好自主选择GPU芯片的功能.
+        int total_device = torch::cuda::device_count();
+        if (!torch::cuda::is_available())
         {
-            spdlog::debug("计算:收到来自{}的棋盘数据", p->first);
-            sender_deque.emplace_back(p->first);
-            evolution_batch = torch::cat({evolution_batch, p->second});
-            // p在原始线程中是堆中内存,要及施放掉.
-            delete p;
-            p = nullptr;
+            total_device = 1;
         }
-        // 拿到了对于的数据,就开始进行前向计算
-        if (sender_deque.size() >= EVO_BATCH)
+
+        // 开始拷贝model数据,用于前向计算
+        // 直接从主线程复制一个network.
+        pthread_mutex_lock(&model_mtx);
+        auto dev_idx = (total_device - 1) - id % total_device;
+        auto gNetwork_device = gNetwork.model->parameters()[0].device();
+        spdlog::info("evoluter{}开始复制model到device:{}", id, dev_idx);
+        PolicyValueNet net(dev_idx);
+        net.model = std::dynamic_pointer_cast<NetImpl>(
+            gNetwork.model->clone(net.device));
+        assert(gNetwork_device == gNetwork.model->parameters()[0].device());
+
+        evo_model_ver = model_version;
+        pthread_mutex_unlock(&model_mtx);
+
+        Tensor evolution_batch   = torch::empty({0});
+
+        spdlog::debug("evoluter{}:复制成功,进入前向计算", id);
+#pragma omp barrier
+        while (true)
         {
-            Tensor policy, value;
-            spdlog::debug("计算:开始前向计算,本次计算的batch大小为:{}",
-                          evolution_batch.size(0));
-            // 拷贝一份evolution中的数据,防止在多线程计算的时候出现竞争条件.
-            auto batch = evolution_batch.index({torch::indexing::Slice({0, 0+EVO_BATCH})}).clone();
-            spdlog::debug("batch的大小为:{}",batch.size(0));
-            evolution_batch = evolution_batch.index({torch::indexing::Slice(0 + EVO_BATCH, torch::indexing::None)});
-            spdlog::debug("evolution_batch的大小为:{}",batch.size(0));
-            std::tie(policy, value) = net.policy_value(batch);
+            // 获取自对弈线程发送的棋局数据
+            std::pair<decltype(omp_get_thread_num()), Tensor>* p;
 
-            assert(policy.size(0) == (long long)batch.size(0));
-            assert(sender_deque.size() == (size_t)batch.size(0));
-
-            // 将前向计算后的结果送回自对弈线程
-            for (long long ind = 0; ind != batch.size(0); ++ind)
+            if (evo_queue.dequeue(&p))
             {
-                // 使用ck_hs, 这里又分配了堆上内存.
-                auto pair = new std::pair(policy[ind], value[ind]);
-                auto key  = sender_deque.front();
-                sender_deque.pop_front();
-                spdlog::debug("计算:将计算后的结果发送给{}", key);
-                if (evo_ht.put(key, pair) == false)
-                {
-                    SPDLOG_CRITICAL("计算:发送给{}失败", key);
-                }
-                evo_counter++;
+                spdlog::debug("计算{}:收到来自{}的棋盘数据", id, p->first);
+                sender_deque.emplace_back(p->first);
+                evolution_batch = torch::cat({evolution_batch, p->second});
+                // p在原始线程中是堆中内存,要及施放掉.
+                delete p;
+                p = nullptr;
             }
-            // 设置完毕之后,发送一个广播,唤醒所有的等待的线程.
-            spdlog::debug("计算:完成一次计算,广播条件量");
+            // 拿到了对于的数据,就开始进行前向计算
+            if (sender_deque.size() >= EVO_BATCH)
+            {
+                Tensor policy, value;
+                // 拷贝一份evolution中的数据,防止在多线程计算的时候出现竞争条件.
+                auto batch =
+                    evolution_batch
+                        .index({torch::indexing::Slice({0, 0 + EVO_BATCH})})
+                        .clone();
+                spdlog::debug("batch的大小为:{}", batch.size(0));
+                evolution_batch = evolution_batch.index({torch::indexing::Slice(
+                    0 + EVO_BATCH, torch::indexing::None)});
+                spdlog::debug("evolution_batch的大小为:{}", batch.size(0));
+                std::tie(policy, value) = net.policy_value(batch);
+
+                assert(policy.size(0) == (long long)batch.size(0));
+                assert(sender_deque.size() == (size_t)batch.size(0));
+
+                // 将前向计算后的结果送回自对弈线程
+                for (long long ind = 0; ind != batch.size(0); ++ind)
+                {
+                    // 使用ck_hs, 这里又分配了堆上内存.
+                    auto pair = new std::pair(policy[ind], value[ind]);
+                    auto key  = sender_deque.front();
+                    sender_deque.pop_front();
+                    spdlog::debug("计算:将计算后的结果发送给{}", key);
+                    if (evo_ht.put(key, pair) == false)
+                    {
+                        SPDLOG_CRITICAL("计算:发送给{}失败", key);
+                    }
+                    evo_counter++;
+                }
+                // 设置完毕之后,发送一个广播,唤醒所有的等待的线程.
+                spdlog::debug("计算:完成一次计算,广播条件量");
+                pthread_cond_broadcast(&evo_cond);
+
+            }
+            // 在这里我们设置一起提醒以避免死锁
             pthread_cond_broadcast(&evo_cond);
 
-            totoal_evaluation += EVO_BATCH;
-        }
-        // 在这里我们设置一起提醒以避免死锁
-        pthread_cond_broadcast(&evo_cond);
-
-        // 检测距离上一次是否有更新过模型
-        if (evo_model_ver != model_version)
-        {
-            spdlog::info("准备同步模型");
-            if (pthread_mutex_trylock(&model_mtx) == 0)
+            // 检测距离上一次是否有更新过模型
+            if (evo_model_ver != model_version)
             {
-                PolicyValueNet net(1);
-                net.model     = Net(std::dynamic_pointer_cast<NetImpl>(
-                    gNetwork.model->clone(net.device)));
-                evo_model_ver = model_version;
-                pthread_mutex_unlock(&model_mtx);
+                if (pthread_mutex_trylock(&model_mtx) == 0)
+                {
+                    spdlog::info("准备同步模型");
+                    PolicyValueNet net(1);
+                    net.model     = Net(std::dynamic_pointer_cast<NetImpl>(
+                        gNetwork.model->clone(net.device)));
+                    evo_model_ver = model_version;
+                    pthread_mutex_unlock(&model_mtx);
+                }
             }
         }
     }
@@ -349,9 +357,9 @@ void* worker(void* params)
                 GAME_LEN_LIMIT, SIMULATION);
     // 调试状态下,只开启一个线程
 #ifndef NDEBUG
-    omp_set_num_threads(2);
+    omp_set_num_threads(8);
 #endif
-    spdlog::info("自对弈线程数:{}", omp_get_num_threads());
+    spdlog::info("自对弈线程数:{}", omp_get_max_threads());
 #pragma omp parallel
     {
         while (true)
