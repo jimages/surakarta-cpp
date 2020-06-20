@@ -41,8 +41,14 @@ ENDIF()
 MESSAGE("-- The Build type is ${CMAKE_BUILD_TYPE}")
 add_compile_options(-Wall -Wextra)
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
-set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -DNDEBUG -ffast-math -march=native -funroll-loops -malign-double -minline-all-stringops -ftree-parallelize-loops=`grep -c ^processor /proc/cpuinfo
-` -flto -fuse-linker-plugin ")
+
+IF ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
+set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -DNDEBUG -ffast-math -march=native -funroll-loops -malign-double -minline-all-stringops -ftree-parallelize-loops=8 -flto -fuse-linker-plugin ")
+endif()
+IF ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+endif()
+
 SET (MY_LIBRARY_DEPENDENCIES)
 
 ## OpenMP
@@ -109,11 +115,7 @@ endif()
 # add spdlog
 include(libck.cmake)
 
-# Add marl
-set(MARL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libmarl)
-add_subdirectory(${MARL_DIR})
-
-LIST(APPEND MY_LIBRARY_DEPENDENCIES ck marl spdlog::spdlog)
+LIST(APPEND MY_LIBRARY_DEPENDENCIES ck spdlog::spdlog)
 #
 # Include directories
 #

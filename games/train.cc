@@ -7,6 +7,7 @@
 #include <torch/torch.h>
 #include <unistd.h>
 
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -289,17 +290,23 @@ void* evoluter(void* params)
             Tensor policy, value;
             spdlog::debug("计算:开始前向计算,本次计算的batch大小为:{}",
                           evolution_batch.size(0));
-            std::tie(policy, value) = net.policy_value(evolution_batch);
+            // 拷贝一份evolution中的数据,防止在多线程计算的时候出现竞争条件.
+            auto batch = evolution_batch.index({torch::indexing::Slice({0, 0+EVO_BATCH})}).clone();
+            spdlog::debug("batch的大小为:{}",batch.size(0));
+            evolution_batch = evolution_batch.index({torch::indexing::Slice(0 + EVO_BATCH, torch::indexing::None)});
+            spdlog::debug("evolution_batch的大小为:{}",batch.size(0));
+            std::tie(policy, value) = net.policy_value(batch);
 
-            assert(policy.size(0) == (long long)evolution_batch.size(0));
-            assert(sender_deque.size() == (size_t)evolution_batch.size(0));
+            assert(policy.size(0) == (long long)batch.size(0));
+            assert(sender_deque.size() == (size_t)batch.size(0));
 
             // 将前向计算后的结果送回自对弈线程
-            for (long long ind = 0; ind != evolution_batch.size(0); ++ind)
+            for (long long ind = 0; ind != batch.size(0); ++ind)
             {
                 // 使用ck_hs, 这里又分配了堆上内存.
                 auto pair = new std::pair(policy[ind], value[ind]);
-                auto key  = sender_deque.at(ind);
+                auto key  = sender_deque.front();
+                sender_deque.pop_front();
                 spdlog::debug("计算:将计算后的结果发送给{}", key);
                 if (evo_ht.put(key, pair) == false)
                 {
@@ -307,12 +314,10 @@ void* evoluter(void* params)
                 }
                 evo_counter++;
             }
-            sender_deque.clear();
             // 设置完毕之后,发送一个广播,唤醒所有的等待的线程.
             spdlog::debug("计算:完成一次计算,广播条件量");
             pthread_cond_broadcast(&evo_cond);
 
-            evolution_batch = torch::empty({0});
             totoal_evaluation += EVO_BATCH;
         }
         // 在这里我们设置一起提醒以避免死锁
@@ -343,7 +348,9 @@ void* worker(void* params)
     SPDLOG_INFO("开始自对弈训练,单局步数限制为{}, 单步模拟次数为{}",
                 GAME_LEN_LIMIT, SIMULATION);
     // 调试状态下,只开启一个线程
+#ifndef NDEBUG
     omp_set_num_threads(2);
+#endif
     spdlog::info("自对弈线程数:{}", omp_get_num_threads());
 #pragma omp parallel
     {
