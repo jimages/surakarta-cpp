@@ -26,8 +26,8 @@
 #include <utility>
 #include <vector>
 
+#include "concurrentqueue.h"
 #include "constant.h"
-#include "fifo.h"
 #include "hash.h"
 #include "helper.h"
 #include "mcts.h"
@@ -37,10 +37,11 @@
 using MCTS::Node;
 using torch::Tensor;
 // 训练数据集的队列
-fifo<std::array<Tensor, 3>> train_dataset;
+moodycamel::ConcurrentQueue<std::array<Tensor, 3>> train_dataset(10);
 
 // 前向计算数据集的队列
-fifo<std::pair<decltype(omp_get_thread_num()), Tensor>> evo_queue;
+moodycamel::ConcurrentQueue<std::pair<decltype(omp_get_thread_num()), Tensor>>
+    evo_queue(10);
 pthread_cond_t evo_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t evo_mtx = PTHREAD_MUTEX_INITIALIZER;
 // 向自对弈线程返回计算结果
@@ -149,7 +150,7 @@ void* trainer(void* param)
     pthread_mutex_unlock(&model_mtx);
     pthread_cond_signal(&model_cond);
 
-    std::array<Tensor, 3>* d;
+    std::array<Tensor, 3> d;
 
     auto last_speed_chk_tim = omp_get_wtime();
 
@@ -163,25 +164,30 @@ void* trainer(void* param)
         SPDLOG_DEBUG("开始统计一次速度");
         if (last_speed_chk_tim + 10 < omp_get_wtime())
         {
-            std::printf("\rspeed:%f", evo_counter / 10.0);
+            std::printf("\rspeed:%f",
+                        evo_counter / (omp_get_wtime() - last_speed_chk_tim));
             std::fflush(stdout);
             evo_counter        = 0;
             last_speed_chk_tim = omp_get_wtime();
         }
-        auto sts = train_dataset.dequeue(&d);
-        if (sts)
+        if (train_dataset.try_dequeue(d))
         {
             // get board, probability, value
             Tensor b, p, v;
-            b = d->at(0);
-            p = d->at(1);
-            v = d->at(2);
-            delete d;
-            d = nullptr;
-
-            board = torch::cat({b, board});
-            mcts  = torch::cat({p, mcts});
-            value = torch::cat({v, value});
+            b = d.at(0);
+            p = d.at(1).reshape({-1, 6, 6, 6, 6});
+            v = d.at(2);
+            // 在这里进行一次数据的扩充,镜像扩充.
+            board = torch::cat(
+                {b, b.flip({2, 3}), b.flip({2}), b.flip({3}), board});
+            mcts =
+                torch::cat({p.reshape({-1, 6 * 6 * 6 * 6}),
+                            p.flip({1, 2, 3, 4})
+                                .reshape({-1, 6 * 6 * 6 * 6})
+                                .reshape({-1, 6 * 6 * 6 * 6}),
+                            p.flip({1, 3}).reshape({-1, 6 * 6 * 6 * 6}),
+                            p.flip({2, 4}).reshape({-1, 6 * 6 * 6 * 6}), mcts});
+            value = torch::cat({v, v, v, v, value});
             std::cout << '\n';
             spdlog::info("积累的局数: {} 数据集: {} 当局步数: {} ", game,
                          board.size(0), v.size(0));
@@ -206,7 +212,10 @@ void* trainer(void* param)
                 SPDLOG_DEBUG("准备进行一次训练,因此锁住全局模型");
                 // 要进行反向传播,所以锁住模型
                 pthread_mutex_lock(&model_mtx);
-                std::tie(loss, entropy) = gNetwork.train_step(b, p, v);
+                for(auto i = 0; i <= 5; ++i)
+                {
+                    std::tie(loss, entropy) = gNetwork.train_step(b, p, v);
+                }
                 pthread_mutex_unlock(&model_mtx);
 
                 model_version++;
@@ -261,7 +270,7 @@ void* evoluter(void* params)
         // 开始拷贝model数据,用于前向计算
         // 直接从主线程复制一个network.
         pthread_mutex_lock(&model_mtx);
-        auto dev_idx = (total_device - 1) - id % total_device;
+        auto dev_idx         = (total_device - 1) - id % total_device;
         auto gNetwork_device = gNetwork.model->parameters()[0].device();
         spdlog::info("evoluter{}开始复制model到device:{}", id, dev_idx);
         PolicyValueNet net(dev_idx);
@@ -272,23 +281,21 @@ void* evoluter(void* params)
         evo_model_ver = model_version;
         pthread_mutex_unlock(&model_mtx);
 
-        Tensor evolution_batch   = torch::empty({0});
+        Tensor evolution_batch = torch::empty({0});
 
         spdlog::debug("evoluter{}:复制成功,进入前向计算", id);
 #pragma omp barrier
+        std::pair<decltype(omp_get_thread_num()), Tensor> p;
         while (true)
         {
             // 获取自对弈线程发送的棋局数据
-            std::pair<decltype(omp_get_thread_num()), Tensor>* p;
 
-            if (evo_queue.dequeue(&p))
+            if (evo_queue.try_dequeue(p))
             {
-                spdlog::debug("计算{}:收到来自{}的棋盘数据", id, p->first);
-                sender_deque.emplace_back(p->first);
-                evolution_batch = torch::cat({evolution_batch, p->second});
+                spdlog::debug("计算{}:收到来自{}的棋盘数据", id, p.first);
+                sender_deque.emplace_back(p.first);
+                evolution_batch = torch::cat({evolution_batch, p.second});
                 // p在原始线程中是堆中内存,要及施放掉.
-                delete p;
-                p = nullptr;
             }
             // 拿到了对于的数据,就开始进行前向计算
             if (sender_deque.size() >= EVO_BATCH)
@@ -325,7 +332,6 @@ void* evoluter(void* params)
                 // 设置完毕之后,发送一个广播,唤醒所有的等待的线程.
                 spdlog::debug("计算:完成一次计算,广播条件量");
                 pthread_cond_broadcast(&evo_cond);
-
             }
             // 在这里我们设置一起提醒以避免死锁
             pthread_cond_broadcast(&evo_cond);
@@ -373,6 +379,7 @@ void* worker(void* params)
             SurakartaState game;
             auto root =
                 std::make_shared<Node<SurakartaState>>(game.player_to_move);
+            auto player = torch::zeros({0}, torch::TensorOptions(torch::kInt));
             // 如果棋局还没有结束并且一方还可以下棋,并且局数大于限制的时候
             while (!game.terminal() && game.has_moves() &&
                    count < GAME_LEN_LIMIT)
@@ -384,13 +391,11 @@ void* worker(void* params)
                 auto move = run_mcts(
                     root, game, count / 2,
                     [](Tensor t) -> std::pair<Tensor, Tensor> {
-                        auto id = omp_get_thread_num() + 1;
-                        auto data =
-                            new std::pair<decltype(omp_get_thread_num()),
-                                          Tensor>(id, t);
+                        auto id   = omp_get_thread_num() + 1;
+                        auto data = std::make_pair(id, t);
                         spdlog::debug("{}:准备将棋盘数据发送给前向计算服务器",
                                       id);
-                        evo_queue.enqueue(data);
+                        evo_queue.enqueue(std::move(data));
                         // 用于存储前向计算结果的指针
                         std::pair<Tensor, Tensor>* p;
 
@@ -444,6 +449,10 @@ void* worker(void* params)
                     goto finish;
 
                 // if in long situation. exit.
+                player = torch::cat(
+                    {player,
+                     torch::from_blob(&game.player_to_move, 1,
+                                      torch::TensorOptions(torch::kInt))});
                 game.do_move(move);
                 root = root->get_child(move);
                 ++count;
@@ -453,19 +462,16 @@ void* worker(void* params)
             int winner = game.get_winner();
             int size   = b.size(0);
             auto v     = torch::zeros({size}, torch::kFloat);
-            if (winner != 0)
-            {
-                for (int i = 0; i < size; ++i)
-                {
-                    v[i] = (i % 2 + 1) == winner ? 1.0F : -1.0F;
-                }
-            }
+            auto win_result =
+                torch::zeros_like(player, torch::TensorOptions(torch::kFloat));
+            win_result.masked_fill_((player == winner), 1.0F);
+            win_result.masked_fill_((player != winner), -1.0F);
 
             // 这一局完成后,将比赛的结果发送给训练线程,收集数据
             spdlog::info("自对弈结束一局,该局步数:{}, 胜利方:{}", size, winner);
-
-            auto data = new std::array<Tensor, 3>{b, p, v};
-            train_dataset.enqueue(data);
+            auto data =
+                std::array<Tensor, 3>{b, p, win_result.to(torch::kFloat)};
+            train_dataset.enqueue(std::move(data));
         }
     }
     spdlog::error("worder 线程异常结束");

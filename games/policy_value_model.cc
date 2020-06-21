@@ -55,67 +55,43 @@ torch::Tensor BasicBlockImpl::forward(torch::Tensor x)
     return x;
 }
 NetImpl::NetImpl()
-    : conv1(register_module(
-          "conv1", torch::nn::Conv2d(Conv2dOptions(9, 256, 3).padding(1))))
-    , bat1(register_module(
-          "bat1", torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(256))))
-    , res_layers(torch::nn::Sequential())
-    // 策略网络
-    , pol_conv1(register_module("pol_conv1",
-                                torch::nn::Conv2d(Conv2dOptions(256, 4, 1))))
-    , pol_bat1(register_module(
-          "pol_bat1", torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(4))))
-    , pol_fc1(register_module(
-          "pol_fc1", torch::nn::Linear(4 * width * height,
-                                       width * height * width * height)))
-
-    // 价值网络
-    , val_conv1(register_module("val_conv1",
-                                torch::nn::Conv2d(Conv2dOptions(256, 2, 1))))
-    , val_bat1(register_module(
-          "val_bat1", torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(2))))
-    , val_fc1(
-          register_module("val_fc1", torch::nn::Linear(2 * width * height, 1)))
-
 {
-    for (int i = 0; i <= 5; ++i)
-    {
-        res_layers->push_back(std::move(BasicBlock(256, 256)));
-    }
-    register_module("res_layers", res_layers);
+    reset();
 }
 
 // 当克隆模型的时候,需要重新初始化对于的submodule.
 void NetImpl::reset()
 {
-    conv1 = torch::nn::Conv2d(Conv2dOptions(9, 256, 3).padding(1));
-    bat1  = torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(256));
+    conv1 = torch::nn::Conv2d(Conv2dOptions(8, 128, 3).padding(1));
+    bat1  = torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(128).eps(1e-5).affine(true));
     register_module("conv1", conv1);
     register_module("bat1", bat1);
 
     // 策略网络
-    pol_conv1 = torch::nn::Conv2d(Conv2dOptions(256, 4, 1));
-    pol_bat1  = torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(4));
+    pol_conv1 = torch::nn::Conv2d(Conv2dOptions(128, 2, 1));
+    pol_bat1  = torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(2).eps(1e-5).affine(true));
     pol_fc1 =
-        torch::nn::Linear(4 * width * height, width * height * width * height);
+        torch::nn::Linear(2 * width * height, width * height * width * height);
 
     register_module("pol_conv1", pol_conv1);
     register_module("pol_bat1", pol_bat1);
     register_module("pol_fc1", pol_fc1);
 
     // 价值网络
-    val_conv1 = torch::nn::Conv2d(Conv2dOptions(256, 2, 1));
-    val_bat1  = torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(2));
-    val_fc1   = torch::nn::Linear(2 * width * height, 1);
+    val_conv1 = torch::nn::Conv2d(Conv2dOptions(128, 2, 1));
+    val_bat1  = torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(2).eps(1e-5).affine(true));
+    val_fc1   = torch::nn::Linear(2 * width * height, 128);
+    val_fc2   = torch::nn::Linear(128, 1);
 
     register_module("val_conv1", val_conv1);
     register_module("val_bat1", val_bat1);
     register_module("val_fc1", val_fc1);
+    register_module("val_fc2", val_fc2);
 
     res_layers = torch::nn::Sequential();
     for (int i = 0; i <= 5; ++i)
     {
-        res_layers->push_back(BasicBlock(256, 256));
+        res_layers->push_back(BasicBlock(128, 128));
     }
     register_module("res_layers", res_layers);
 }
@@ -128,12 +104,13 @@ std::pair<torch::Tensor, torch::Tensor> NetImpl::forward(torch::Tensor x)
 
     // 策略网络
     auto x_pol = torch::relu(pol_bat1->forward(pol_conv1->forward(x)));
-    x_pol      = x_pol.view({-1, 4 * height * width});
+    x_pol      = x_pol.view({-1, 2* height * width});
     x_pol      = pol_fc1->forward(x_pol);
 
     // 价值网络
     auto x_val = torch::relu(val_bat1->forward(val_conv1->forward(x)));
-    x_val = torch::tanh(val_fc1->forward(x_val.view({-1, 2 * width * height})));
+    x_val = torch::relu(val_fc1->forward(x_val.view({-1, 2 * width * height})));
+    x_val = torch::tanh(val_fc2->forward(x_val));
 
     return {x_pol, x_val};
 }
@@ -253,7 +230,7 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::train_step(
 
     // 计算一次策略的交叉熵，用于性能检测用途
     auto entropy =
-        -mean(sum(torch::log_softmax(act_prob, 1) * mcts_probs, 1), kFloat32);
+        -mean(sum(torch::log_softmax(act_prob, 1) * torch::softmax(act_prob, 1), 1), kFloat32);
     return std::make_pair(loss, entropy);
 }
 

@@ -202,31 +202,35 @@ torch::Tensor SurakartaState::tensor() const
     for (size_t i = 0; i < BOARD_SIZE * BOARD_SIZE; ++i)
         boardInt[i] = static_cast<int>(board[i]);
 
-    torch::Tensor state = torch::zeros({ 9, BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
+    torch::Tensor state = torch::zeros({ 8, BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
     torch::Tensor boardTensor = torch::from_blob(boardInt, { BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
 
-    // 双方棋子的位置棋子的位置
+    // 我方棋子的位置
     state[0] = (boardTensor == player_to_move).to(torch::TensorOptions().dtype(torch::kInt));
+
+    // 对方棋子的位置
     state[1] = (boardTensor == (3 - player_to_move)).to(torch::TensorOptions().dtype(torch::kInt));
-    // 外环的棋子
+
+    // 外环我方棋子的位置
     state[2] = torch::__and__(state[0], outter_loop_mask);
+    // 外环对方棋子的位置
     state[3] = torch::__and__(state[1], outter_loop_mask);
-    // 内环的棋子
+
+    // 内环我方的棋子的位置
     state[4] = torch::__and__(state[0], inner_loop_mask);
+    // 内环对方的棋子的位置
     state[5] = torch::__and__(state[1], inner_loop_mask);
-    // 对方上一步移动的棋子
+    // 外环对方的棋子的位置 
     if (last_move != no_move && last_move.is_activated) {
-        state[6][last_move.current.second][last_move.current.first] = 1;
-        state[7][last_move.target.second][last_move.target.first] = 1;
+        state[6][last_move.target.second][last_move.target.first] = 1;
     } else {
         state[6] = torch::zeros({ BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
-        state[7] = torch::zeros({ BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
     }
     // 我方是否为先手，先手为1，否则不为先手
     if (player_to_move == 1)
-        state[8] = torch::ones({ BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
+        state[7] = torch::zeros({ BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
     else
-        state[8] = torch::zeros({ BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
+        state[7] = torch::ones({ BOARD_SIZE, BOARD_SIZE }, torch::TensorOptions().dtype(torch::kInt));
 
     return state.to(torch::kFloat).unsqueeze_(0);
 }
