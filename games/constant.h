@@ -18,7 +18,7 @@
 
 // evaluation的batch数量
 #ifdef NDEBUG
-#define EVO_BATCH 20
+#define EVO_BATCH 8
 #else
 #define EVO_BATCH 4
 #endif

@@ -6,6 +6,9 @@
 #include <spdlog/cfg/env.h>
 #include <torch/torch.h>
 #include <unistd.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/basic_file_sink.h>
+
 
 #include <algorithm>
 #include <array>
@@ -106,13 +109,18 @@ void* trainer(void* param)
 {
     SPDLOG_INFO("单步的模拟次数为: {}", SIMULATION);
     SPDLOG_INFO("单次前向计算的数量为: {}", EVO_BATCH);
+    auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    console_sink->set_level(spdlog::level::info);
 
+    auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("logs/train.log", true);
+    file_sink->set_level(spdlog::level::info);
+
+    spdlog::logger logger("multi_sink", {console_sink, file_sink});
     // 加载model阶段,获取model的锁
     pthread_mutex_lock(&model_mtx);
 
     // 初始化相关的数据
     uint64_t game = 1;
-    u_long batch  = 1;
     Tensor board  = torch::empty({0});
     Tensor mcts   = torch::empty({0});
     Tensor value  = torch::empty({0});
@@ -212,24 +220,24 @@ void* trainer(void* param)
                 SPDLOG_DEBUG("准备进行一次训练,因此锁住全局模型");
                 // 要进行反向传播,所以锁住模型
                 pthread_mutex_lock(&model_mtx);
-                for(auto i = 0; i <= 5; ++i)
+                for (auto i = 0; i <= 5; ++i)
                 {
                     std::tie(loss, entropy) = gNetwork.train_step(b, p, v);
                 }
                 pthread_mutex_unlock(&model_mtx);
 
                 model_version++;
-                spdlog::info("game: {} batch: {} loss: {} entropy: {} train "
+                logger.info("game: {} loss: {} entropy: {} train "
                              "dataset size: {} model version: {}",
-                             game, batch++, loss.item<float>(),
+                             game, loss.item<float>(),
                              entropy.item<float>(), board.size(0),
                              model_version);
             }
 
             // saving the model
-            if (batch % 100 == 0)
+            if (game % 100 == 0)
             {
-                spdlog::info("保存网络, 当前对局数:{}, batch{}", game, batch);
+                spdlog::info("保存网络, 当前对局数:{}", game);
 
                 pthread_mutex_lock(&model_mtx);
 
@@ -251,7 +259,12 @@ void* evoluter(void* params)
 {
     // 先睡一秒钟,防止出现evoluter比trainer先进入临界区.
     sleep(1);
-#pragma omp parallel num_threads(2)
+#ifndef NDEBUG
+    omp_set_num_threads(2);
+#else
+    omp_set_num_threads(4);
+#endif
+#pragma omp parallel
     {
         auto id = omp_get_thread_num();
         spdlog::info("前向计算线程{}启动!", id);
@@ -342,7 +355,6 @@ void* evoluter(void* params)
                 if (pthread_mutex_trylock(&model_mtx) == 0)
                 {
                     spdlog::info("准备同步模型");
-                    PolicyValueNet net(1);
                     net.model     = Net(std::dynamic_pointer_cast<NetImpl>(
                         gNetwork.model->clone(net.device)));
                     evo_model_ver = model_version;
