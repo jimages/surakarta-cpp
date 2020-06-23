@@ -87,18 +87,7 @@ std::tuple<Tensor, Tensor, Tensor> sample(const Tensor& board,
     std::mt19937 g(rd());
 
     // generate the sample indexs.
-    auto size = board.size(0);
-    std::vector<size_t> order(size);
-    std::array<size_t, SAMPLE_SIZE> order_sampled;
-
-    std::iota(order.begin(), order.end(), 0);
-    std::shuffle(order.begin(), order.end(), g);
-
-    std::copy_n(order.begin(), SAMPLE_SIZE, order_sampled.begin());
-
-    // 获得了取样数据的index序列
-    Tensor idx = torch::from_blob(order_sampled.data(), {SAMPLE_SIZE},
-                                  torch::TensorOptions().dtype(torch::kLong));
+    auto idx = torch::randperm(board.size(0), torch::TensorOptions(torch::kInt64)).slice(0, 0, 1024,1);
 
     return std::make_tuple(board.index_select(0, idx),
                            mcts.index_select(0, idx),
@@ -455,16 +444,16 @@ void* worker(void* params)
             out:
                 b = at::cat({b, board}, 0);
                 p = at::cat({p, get_statistc(root)}, 0);
+                player = torch::cat(
+                    {player,
+                     torch::from_blob(&game.player_to_move, 1,
+                                      torch::TensorOptions(torch::kInt))});
 
                 // 如果如果找到了重复出现的局面,则直接跳出这一局,直接结算结果
                 if (equal_count >= LONG_SITUATION_THRESHOLD)
                     goto finish;
 
                 // if in long situation. exit.
-                player = torch::cat(
-                    {player,
-                     torch::from_blob(&game.player_to_move, 1,
-                                      torch::TensorOptions(torch::kInt))});
                 game.do_move(move);
                 root = root->get_child(move);
                 ++count;
