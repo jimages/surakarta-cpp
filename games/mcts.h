@@ -292,26 +292,22 @@ float evaluate(shared_ptr<Node<State>> node, const State& state,
 }
 
 template <typename State>
-void backpropagate(shared_ptr<Node<State>> l, int to_play, float value)
+void backpropagate(shared_ptr<Node<State>> l, float value)
 {
-    auto leaf = l.get();
     // for leaf node.
-    leaf->mtx.lock();
-    leaf->value_sum += leaf->player_to_move == to_play ? -value : value;
-    leaf->visits += 1;
-    leaf->Q = leaf->value_sum / leaf->visits;
-    leaf->mtx.unlock();
-    leaf = leaf->parent;
+    // Q值的更新不应该更新新扩展的节点,而应该更新的是新扩展阶段的父亲节点.
+    auto leaf = l.get();
+    leaf  = leaf->parent;
 
     while (leaf != nullptr)
     {
         leaf->mtx.lock();
-        leaf->value_sum +=
-            (leaf->player_to_move == to_play ? -value : value) + VIRTUAL_LOSS;
+        leaf->value_sum += value + VIRTUAL_LOSS;
         leaf->visits -= (VIRTUAL_LOSS - 1);
         leaf->Q = leaf->value_sum / leaf->visits;
         leaf->mtx.unlock();
-        leaf = leaf->parent;
+        leaf  = leaf->parent;
+        value = -value;
     }
 }
 
@@ -343,8 +339,11 @@ typename State::Move run_mcts(
         {
             value = game.player_to_move == game.get_winner() ? 1.0 : -1.0;
         }
-        value = evaluate(node, game, func);
-        backpropagate(node, game.player_to_move, -value);
+        else
+        {
+            value = evaluate(node, game, func);
+        }
+        backpropagate(node, -value);
     }
 
     return root->best_action(steps, 1.0).first;
@@ -377,8 +376,16 @@ shared_ptr<Node<State>> mcts_thread(shared_ptr<Node<State>> root,
             std::tie(move, node) = node->best_child();
             game.do_move(move);
         }
-        float value = evaluate(node, game, network);
-        backpropagate(node, game.player_to_move, value);
+        float value;
+        if (game.terminal())
+        {
+            value = game.player_to_move == game.get_winner() ? 1.0 : -1.0;
+        }
+        else
+        {
+            value = evaluate(node, game, network);
+        }
+        backpropagate(node, -value);
     }
     return root;
 }
