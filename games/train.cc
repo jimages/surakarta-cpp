@@ -4,11 +4,10 @@
 #include <omp.h>
 #include <pthread.h>
 #include <spdlog/cfg/env.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <torch/torch.h>
 #include <unistd.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 
 #include <algorithm>
 #include <array>
@@ -76,6 +75,7 @@ Tensor get_statistc(std::shared_ptr<Node<SurakartaState>> node)
     {
         prob[move2index(i->first)] = i->second->visits / total;
     }
+    prob.masked_fill_(torch::isnan(prob), 0);
     return prob.unsqueeze_(0);
 }
 
@@ -87,7 +87,9 @@ std::tuple<Tensor, Tensor, Tensor> sample(const Tensor& board,
     std::mt19937 g(rd());
 
     // generate the sample indexs.
-    auto idx = torch::randperm(board.size(0), torch::TensorOptions(torch::kInt64)).slice(0, 0, 1024,1);
+    auto idx =
+        torch::randperm(board.size(0), torch::TensorOptions(torch::kInt64))
+            .slice(0, 0, 1024, 1);
 
     return std::make_tuple(board.index_select(0, idx),
                            mcts.index_select(0, idx),
@@ -101,7 +103,8 @@ void* trainer(void* param)
     auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     console_sink->set_level(spdlog::level::info);
 
-    auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("logs/train.log", true);
+    auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+        "logs/train.log", true);
     file_sink->set_level(spdlog::level::info);
 
     spdlog::logger logger("multi_sink", {console_sink, file_sink});
@@ -212,15 +215,14 @@ void* trainer(void* param)
                 for (auto i = 0; i <= 5; ++i)
                 {
                     std::tie(loss, entropy) = gNetwork.train_step(b, p, v);
+                    logger.info("game: {} loss: {} entropy: {} train "
+                                "dataset size: {} model version: {} step version: {}",
+                                game, loss.item<float>(), entropy.item<float>(),
+                                board.size(0), model_version, i);
                 }
                 pthread_mutex_unlock(&model_mtx);
 
                 model_version++;
-                logger.info("game: {} loss: {} entropy: {} train "
-                             "dataset size: {} model version: {}",
-                             game, loss.item<float>(),
-                             entropy.item<float>(), board.size(0),
-                             model_version);
             }
 
             // saving the model
@@ -442,8 +444,8 @@ void* worker(void* params)
                     }
                 }
             out:
-                b = at::cat({b, board}, 0);
-                p = at::cat({p, get_statistc(root)}, 0);
+                b      = at::cat({b, board}, 0);
+                p      = at::cat({p, get_statistc(root)}, 0);
                 player = torch::cat(
                     {player,
                      torch::from_blob(&game.player_to_move, 1,
