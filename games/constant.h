@@ -14,7 +14,7 @@
 #endif
 
 // 训练数据窗口数量
-#define GAME_DATA_LIMIT 1000000
+#define GAME_DATA_LIMIT 3000000
 
 // evaluation的batch数量
 #ifdef NDEBUG
@@ -26,15 +26,13 @@
 // 计算推断速度的时间阈值
 #define TIME_LIMIT 20
 
-// threshold the only_eat domain
-#define THRESHOLD_ONLY_EAT 300
-
 #define LONG_SITUATION_THRESHOLD 3
 
 #define VIRTUAL_LOSS 1000
 
-#define PB_C_BASE 1599.0f
+#define PB_C_BASE 19652.0f
 #define PB_C_INIT 1.25f
+
 #ifdef NDEBUG
 #define SIMULATION 800
 #else
