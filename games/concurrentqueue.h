@@ -5,7 +5,7 @@
 //    http://moodycamel.com/blog/2014/detailed-design-of-a-lock-free-queue
 
 // Simplified BSD license:
-// Copyright (c) 2013-2016, Cameron Desrochers.
+// Copyright (c) 2013-2020, Cameron Desrochers.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification,
@@ -27,6 +27,7 @@
 // TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 // EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Also dual-licensed under the Boost Software License (see LICENSE.md)
 
 #pragma once
 
@@ -364,6 +365,12 @@ struct ConcurrentQueueDefaultTraits
 	// that this limit is enforced at the block level (for performance reasons), i.e.
 	// it's rounded up to the nearest block size.
 	static const size_t MAX_SUBQUEUE_SIZE = details::const_numeric_max<size_t>::value;
+
+	// The number of times to spin before sleeping when waiting on a semaphore.
+	// Recommended values are on the order of 1000-10000 unless the number of
+	// consumer threads exceeds the number of idle cores (in which case try 0-100).
+	// Only affects instances of the BlockingConcurrentQueue.
+	static const int MAX_SEMA_SPINS = 10000;
 	
 	
 #ifndef MCDBGQ_USE_RELACY

@@ -62,13 +62,13 @@ NetImpl::NetImpl()
 // 当克隆模型的时候,需要重新初始化对于的submodule.
 void NetImpl::reset()
 {
-    conv1 = torch::nn::Conv2d(Conv2dOptions(8, 128, 3).padding(1));
-    bat1  = torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(128).eps(1e-5).affine(true));
+    conv1 = torch::nn::Conv2d(Conv2dOptions(8, 256, 3).padding(1));
+    bat1  = torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(256).eps(1e-5).affine(true));
     register_module("conv1", conv1);
     register_module("bat1", bat1);
 
     // 策略网络
-    pol_conv1 = torch::nn::Conv2d(Conv2dOptions(128, 2, 1));
+    pol_conv1 = torch::nn::Conv2d(Conv2dOptions(256, 2, 1));
     pol_bat1  = torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(2).eps(1e-5).affine(true));
     pol_fc1 =
         torch::nn::Linear(2 * width * height, width * height * width * height);
@@ -78,10 +78,10 @@ void NetImpl::reset()
     register_module("pol_fc1", pol_fc1);
 
     // 价值网络
-    val_conv1 = torch::nn::Conv2d(Conv2dOptions(128, 2, 1));
+    val_conv1 = torch::nn::Conv2d(Conv2dOptions(256, 2, 1));
     val_bat1  = torch::nn::BatchNorm2d(torch::nn::BatchNormOptions(2).eps(1e-5).affine(true));
-    val_fc1   = torch::nn::Linear(2 * width * height, 128);
-    val_fc2   = torch::nn::Linear(128, 1);
+    val_fc1   = torch::nn::Linear(2 * width * height, 256);
+    val_fc2   = torch::nn::Linear(256, 1);
 
     register_module("val_conv1", val_conv1);
     register_module("val_bat1", val_bat1);
@@ -91,7 +91,7 @@ void NetImpl::reset()
     res_layers = torch::nn::Sequential();
     for (int i = 0; i <= 5; ++i)
     {
-        res_layers->push_back(BasicBlock(128, 128));
+        res_layers->push_back(BasicBlock(256, 256));
     }
     register_module("res_layers", res_layers);
 }
@@ -184,10 +184,6 @@ std::pair<torch::Tensor, torch::Tensor> PolicyValueNet::policy_value(
     {
         tgt = states;
     }
-    std::stringstream a;
-    a << "model:" << model->parameters()[0].device() << "states" << tgt.device()
-      << '\n';
-    spdlog::debug("{}", a.str());
 
     assert(!model->is_training());
     model->eval();
