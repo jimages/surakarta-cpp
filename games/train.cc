@@ -294,6 +294,7 @@ void* evoluter(void* params)
         auto total_tim         = .0;
         double inference_tim   = .0;
         double try_dequeue_tim = .0;
+        double copy_deque_tim = .0;
         while (true)
         {
             // 获取自对弈线程发送的棋局数据
@@ -301,12 +302,14 @@ void* evoluter(void* params)
             size_t s = evo_queue.try_dequeue_bulk(ctok, p.begin(), (int)EVO_BATCH * 0.666666);
             if (s)
             {
+                double tim = omp_get_wtime();
                 for (size_t i = 0; i < s; ++i)
                 {
                     sender_deque.emplace_back(p[i].first);
                     evolution_batch =
                         torch::cat({evolution_batch, p[i].second});
                 }
+                copy_deque_tim += omp_get_wtime() - tim;
             }
             try_dequeue_tim += omp_get_wtime() - tim;
 
@@ -355,10 +358,11 @@ void* evoluter(void* params)
                 {
                     spdlog::info("准备同步模型");
                     spdlog::debug("推断总共时间 {} 其中推断时间为 {} 占比为 {} "
-                                  "dequeue {} 占比为 {}",
+                                  "dequeue {} 占比为 {} copy {} 占比为 {}",
                                   total_tim, inference_tim,
                                   inference_tim / total_tim, try_dequeue_tim,
-                                  try_dequeue_tim / total_tim);
+                                  try_dequeue_tim / total_tim, copy_deque_tim,
+                                  copy_deque_tim / total_tim);
                     net.model     = Net(std::dynamic_pointer_cast<NetImpl>(
                         gNetwork.model->clone(net.device)));
                     evo_model_ver = model_version;
