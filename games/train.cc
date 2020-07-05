@@ -48,8 +48,7 @@ using torch::Tensor;
 ConcurrentQueue<array<Tensor, 3>> train_dataset;
 
 // 前向计算数据集的队列
-list<ConcurrentQueue<pair<decltype(omp_get_thread_num()), Tensor>>>
-    evo_queue;
+list<ConcurrentQueue<pair<decltype(omp_get_thread_num()), Tensor>>> evo_queue;
 pthread_cond_t evo_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t evo_mtx = PTHREAD_MUTEX_INITIALIZER;
 // 向自对弈线程返回计算结果
@@ -259,7 +258,7 @@ void* evoluter(void* params)
 #ifndef NDEBUG
     omp_set_num_threads(2);
 #else
-    omp_set_num_threads(4);
+    omp_set_num_threads(5);
 #endif
 #pragma omp parallel
     {
@@ -270,10 +269,9 @@ void* evoluter(void* params)
                 50 * moodycamel::ConcurrentQueueDefaultTraits::BLOCK_SIZE);
         }
 #pragma omp barrier
-        pthread_cond_broadcast(&evo_cond);
         auto iter = evo_queue.begin();
         std::advance(iter, omp_get_thread_num());
-        auto &my_evo_queue = *iter;
+        auto& my_evo_queue = *iter;
         moodycamel::ConsumerToken ctok(my_evo_queue);
         auto id = omp_get_thread_num();
         spdlog::info("前向计算线程{}启动!", id);
@@ -306,6 +304,10 @@ void* evoluter(void* params)
         Tensor evolution_batch = torch::empty({0});
 
 #pragma omp barrier
+#pragma omp critical
+        {
+            pthread_cond_broadcast(&evo_cond);
+        }
         std::array<std::pair<decltype(omp_get_thread_num()), Tensor>, EVO_BATCH>
             p;
         auto total_tim         = .0;
@@ -366,10 +368,10 @@ void* evoluter(void* params)
                     evo_counter++;
                 }
                 // 设置完毕之后,发送一个广播,唤醒所有的等待的线程.
-                pthread_cond_broadcast(&evo_cond);
+                // pthread_cond_broadcast(&evo_cond);
             }
             // 在这里我们设置一起提醒以避免死锁
-            pthread_cond_broadcast(&evo_cond);
+            // pthread_cond_broadcast(&evo_cond);
 
             total_tim += omp_get_wtime() - tim;
             // 检测距离上一次是否有更新过模型
@@ -406,15 +408,17 @@ void* worker(void* params)
 #ifndef NDEBUG
     omp_set_num_threads(8);
 #endif
+    omp_set_num_threads(omp_get_max_threads() - 8);
+
     spdlog::info("自对弈线程数:{}", omp_get_max_threads());
+    pthread_cond_wait(&evo_cond, &evo_mtx);
 #pragma omp parallel
     {
-        spdlog::info("等待前向计算线程完成队列初始化工作");
-        pthread_cond_wait(&evo_cond, &evo_mtx);
         auto iter = evo_queue.begin();
         std::advance(iter, omp_get_thread_num() % evo_queue.size());
-        auto &my_evo_queue = *iter;
+        auto& my_evo_queue = *iter;
         moodycamel::ProducerToken ptok(my_evo_queue);
+        spdlog::info("进入到自对弈功能");
         while (true)
         {
             // 用于计算空闲时间
@@ -439,41 +443,45 @@ void* worker(void* params)
                 unsigned int equal_count = 0;
 
                 // 多线程内的消息传递
-                auto move = run_mcts(
-                    root, game, count / 2,
-                    [&busy_tm, &ptok,
-                     &my_evo_queue](Tensor t) -> std::pair<Tensor, Tensor> {
-                        auto id        = omp_get_thread_num() + 1;
-                        auto data      = std::make_pair(id, t);
-                        auto start_tim = omp_get_wtime();
-                        my_evo_queue.enqueue(ptok, std::move(data));
-                        // 用于存储前向计算结果的指针
-                        std::pair<Tensor, Tensor>* p;
+                auto move =
+                    run_mcts(root, game, count / 2,
+                             [&busy_tm, &ptok, &my_evo_queue](
+                                 Tensor t) -> std::pair<Tensor, Tensor> {
+                                 auto id        = omp_get_thread_num() + 1;
+                                 auto data      = std::make_pair(id, t);
+                                 auto start_tim = omp_get_wtime();
+                                 my_evo_queue.enqueue(ptok, std::move(data));
+                                 // 用于存储前向计算结果的指针
+                                 std::pair<Tensor, Tensor>* p;
 
-                        while (pthread_cond_wait(&evo_cond, &evo_mtx) == 0)
-                        {
-                            // 前向计算每完成一次计算,就唤醒一次子线程,让他们自己去找有没有自己的id,如果没有就再等等
-                            if (evo_ht.get(id, &p))
-                            {
-                                evo_ht.remove(id);
-                                auto d = *p;
-                                // ht中的数据是堆上的内存,所以我们应该清空掉这里面的数据
-                                delete p;
-                                // 计算mcts和前向计算的时间
-                                busy_tm += omp_get_wtime() - start_tim;
-                                return {d.first, d.second};
-                            }
-                            else
-                            {
-                                // 如果没有,那么就等下一轮吧.
-                                continue;
-                            }
-                            // this code will not be run,
-                            // make compiler happy
-                            return {Tensor(), Tensor()};
-                        }
-                        SPDLOG_CRITICAL("异常退出了worker");
-                    });
+                                 // while (pthread_cond_wait(&evo_cond,
+                                 // &evo_mtx) == 0)
+                                 while (true)
+                                 {
+                                     // 前向计算每完成一次计算,就唤醒一次子线程,让他们自己去找有没有自己的id,如果没有就再等等
+                                     if (evo_ht.get(id, &p))
+                                     {
+                                         evo_ht.remove(id);
+                                         auto d = *p;
+                                         // ht中的数据是堆上的内存,所以我们应该清空掉这里面的数据
+                                         delete p;
+                                         // 计算mcts和前向计算的时间
+                                         busy_tm += omp_get_wtime() - start_tim;
+                                         return {d.first, d.second};
+                                     }
+                                     else
+                                     {
+                                         // 如果没有,那么就等下一轮吧.
+                                         continue;
+                                     }
+                                     // this code will not be run,
+                                     // make compiler happy
+                                     throw runtime_error("not excepted");
+                                     SPDLOG_CRITICAL("进入了异常执行阶段");
+                                     return {Tensor(), Tensor()};
+                                 }
+                                 SPDLOG_CRITICAL("异常退出了worker");
+                             });
                 // for long situation.
                 for (int i = b.size(0) - 2; i >= 0; i -= 2)
                 {
