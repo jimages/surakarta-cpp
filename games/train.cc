@@ -15,6 +15,7 @@
 #include <cerrno>
 #include <cstdlib>
 #include <deque>
+#include <forward_list>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -37,13 +38,18 @@
 #include "surakarta.h"
 
 using MCTS::Node;
+using moodycamel::ConcurrentQueue;
+using std::array;
+using std::list;
+using std::pair;
+using std::vector;
 using torch::Tensor;
 // 训练数据集的队列
-moodycamel::ConcurrentQueue<std::array<Tensor, 3>> train_dataset(100);
+ConcurrentQueue<array<Tensor, 3>> train_dataset;
 
 // 前向计算数据集的队列
-moodycamel::ConcurrentQueue<std::pair<decltype(omp_get_thread_num()), Tensor>>
-    evo_queue(50 * decltype(evo_queue)::BLOCK_SIZE);
+list<ConcurrentQueue<pair<decltype(omp_get_thread_num()), Tensor>>>
+    evo_queue;
 pthread_cond_t evo_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t evo_mtx = PTHREAD_MUTEX_INITIALIZER;
 // 向自对弈线程返回计算结果
@@ -257,7 +263,18 @@ void* evoluter(void* params)
 #endif
 #pragma omp parallel
     {
-        moodycamel::ConsumerToken ctok(evo_queue);
+#pragma omp critical
+        {
+            spdlog::info("创建单独队列");
+            evo_queue.emplace_front(
+                50 * moodycamel::ConcurrentQueueDefaultTraits::BLOCK_SIZE);
+        }
+#pragma omp barrier
+        pthread_cond_broadcast(&evo_cond);
+        auto iter = evo_queue.begin();
+        std::advance(iter, omp_get_thread_num());
+        auto &my_evo_queue = *iter;
+        moodycamel::ConsumerToken ctok(my_evo_queue);
         auto id = omp_get_thread_num();
         spdlog::info("前向计算线程{}启动!", id);
         std::deque<int> sender_deque;
@@ -294,21 +311,25 @@ void* evoluter(void* params)
         auto total_tim         = .0;
         double inference_tim   = .0;
         double try_dequeue_tim = .0;
-        double copy_deque_tim = .0;
+        double copy_deque_tim  = .0;
         while (true)
         {
             // 获取自对弈线程发送的棋局数据
             auto tim = omp_get_wtime();
-            size_t s = evo_queue.try_dequeue_bulk(ctok, p.begin(), (int)EVO_BATCH * 0.666666);
-            if (s)
+            size_t s = my_evo_queue.try_dequeue_bulk(ctok, p.begin(),
+                                                     (int)EVO_BATCH * 0.666666);
+            if (s > 0ul)
             {
+                std::vector<Tensor> l(1, evolution_batch);
+                l.reserve(1 + s);
                 double tim = omp_get_wtime();
+
                 for (size_t i = 0; i < s; ++i)
                 {
                     sender_deque.emplace_back(p[i].first);
-                    evolution_batch =
-                        torch::cat({evolution_batch, p[i].second});
+                    l.push_back(std::move(p[i].second));
                 }
+                evolution_batch = torch::cat(l);
                 copy_deque_tim += omp_get_wtime() - tim;
             }
             try_dequeue_tim += omp_get_wtime() - tim;
@@ -388,7 +409,12 @@ void* worker(void* params)
     spdlog::info("自对弈线程数:{}", omp_get_max_threads());
 #pragma omp parallel
     {
-        moodycamel::ProducerToken ptok(evo_queue);
+        spdlog::info("等待前向计算线程完成队列初始化工作");
+        pthread_cond_wait(&evo_cond, &evo_mtx);
+        auto iter = evo_queue.begin();
+        std::advance(iter, omp_get_thread_num() % evo_queue.size());
+        auto &my_evo_queue = *iter;
+        moodycamel::ProducerToken ptok(my_evo_queue);
         while (true)
         {
             // 用于计算空闲时间
@@ -415,11 +441,12 @@ void* worker(void* params)
                 // 多线程内的消息传递
                 auto move = run_mcts(
                     root, game, count / 2,
-                    [&busy_tm, &ptok](Tensor t) -> std::pair<Tensor, Tensor> {
+                    [&busy_tm, &ptok,
+                     &my_evo_queue](Tensor t) -> std::pair<Tensor, Tensor> {
                         auto id        = omp_get_thread_num() + 1;
                         auto data      = std::make_pair(id, t);
                         auto start_tim = omp_get_wtime();
-                        evo_queue.enqueue(ptok, std::move(data));
+                        my_evo_queue.enqueue(ptok, std::move(data));
                         // 用于存储前向计算结果的指针
                         std::pair<Tensor, Tensor>* p;
 
