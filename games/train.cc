@@ -3,6 +3,7 @@
  */
 #include <omp.h>
 #include <pthread.h>
+#include <sched.h>
 #include <spdlog/cfg/env.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -36,6 +37,12 @@
 #include "mcts.h"
 #include "policy_value_model.h"
 #include "surakarta.h"
+
+#ifdef SCHED_BATCH
+#define SCHE_POLICY SCHED_BATCH
+#else
+#define SCHE_POLICY SCHED_OTHER
+#endif
 
 using MCTS::Node;
 using moodycamel::ConcurrentQueue;
@@ -547,6 +554,13 @@ int main(int argc, char* argv[])
     spdlog::set_pattern(
         "[%H:%M:%S %z] [%n] [%^%l%$] [process %P] [thread %t] %v");
     SPDLOG_INFO("苏拉卡尔塔棋AlphaZero by Zachary Wang.");
+    struct sched_param sched;
+    sched.sched_priority = 0;
+#ifdef __APPLE__
+    pthread_setschedparam(pthread_self(), SCHE_POLICY, &sched);
+#else
+    sched_setscheduler(getpid(), SCHE_POLICY, &sched);
+#endif
 
     pthread_t t[3];
 
