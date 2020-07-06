@@ -557,9 +557,15 @@ int main(int argc, char* argv[])
     struct sched_param sched;
     sched.sched_priority = 0;
 #ifdef __APPLE__
-    pthread_setschedparam(pthread_self(), SCHE_POLICY, &sched);
+    if (pthread_setschedparam(pthread_self(), SCHE_POLICY, &sched) != 0)
+    {
+        spdlog::warn(strerror(errno));
+    }
 #else
-    sched_setscheduler(getpid(), SCHE_POLICY, &sched);
+    if (sched_setscheduler(getpid(), SCHE_POLICY, &sched) != 0)
+    {
+        spdlog::warn(strerror(errno));
+    }
 #endif
 
     pthread_t t[3];
